@@ -1,0 +1,2134 @@
+---
+title: "Benchmarking Categorical Clustering Methods Across Diverse Datasets"
+author: "Mahmoud Alwaraqi, Senior Data Scientist"
+date: "`r format(Sys.time(),'%B %d, %Y')`"
+output:
+  pdf_document:
+    citation_package: natbib
+    keep_tex: no
+    fig_caption: yes
+    latex_engine: pdflatex
+  html_document:
+    df_print: paged
+header-includes:
+  - \usepackage{pdflscape}
+  - \newcommand{\blandscape}{\begin{landscape}}
+  - \newcommand{\elandscape}{\end{landscape}}
+always_allow_html: TRUE
+bibliography: master.bib
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+Categorical data appears across a wide range of diverse industries. In market research and e-commerce, examples include  survey data, point-of-sale (POS) data, longitudinal customer transaction data, and subscription preferences. In finance and banking, examples include credit card applications, insurance claim logs, and investment profiles based on risk tolerance, financial goals, etc.  Categorical data is also highly relevant in the healthcare and medicine industries where data consists of symptom checklists, patient intake records, and clinical trial profiles. All of these industries, and more, benefit from utilizing clustering methods. The data may consist of nominal (e.g., color) or ordinal variables (e.g., income brackets) and exclude continuous variables from the analysis to focus the scope of this paper on categorical data. The framework of some of the methods mentioned here can easily extend to continuous variables, even without recoding them, such as Finite Mixutre Models (FMMs).
+
+In this paper I compare clustering methods on different categorical datasets. The datasets I experiment with in this paper are the following:
+
+* Iris
+* Mushroom
+* Zoo
+
+The methods I use for clustering categorical data include the following: K-Modes, Hierarchical clustering, and Finite Mixture Models (FMMs) including Latent Class Models (LCMs).  
+
+This paper demonstrates the advantages of Finite Mixture Models as they tend to give consistent quality performance and outperform other methods. 
+
+# Overview of the methods
+
+## K-Modes
+
+k-modes clustering is an extension of k-means clustering, where the mode
+is used to define the center of the cluster instead of the mean. Recall
+that the mode is defined as the most frequently occurring value. It's
+useful when working with categorical data but can be relatively more
+computationally intensive, especially as the number of variables
+increases.
+
+The steps are the following [@MalikTuckfield2019AUL]
+
+1.  Choose any $k$ number of random points as cluster centers.
+
+2.  Find the Hamming distance of each point from the center.
+
+3.  Assign each point to a cluster whose center it is closest to.
+
+4.  Choose new cluster centers in each cluster by finding the mode of
+    all data points in that cluster.
+
+5.  Repeat from step 2 until the cluster centers stop changing.
+
+To pick the number of clusters we will use the average silhouette
+scores/widths. For each data point $i$ with features $y_i \in C_I$ the
+silhouette is
+
+$$
+s(i)=\frac{b(i)-a(i)}{\max \{a(i), b(i)\}} \text {, if }\left|C_I\right|>1
+$$ where $$
+a(i)=\frac{1}{\left|C_I\right|-1} \sum_{y_k \in C_I, k \neq i} d(y_i, y_k)
+$$
+
+$$
+b(i)=\min _{J \neq I} \frac{1}{\left|C_J\right|} \sum_{y_j \in C_J} d(y_i, y_j)
+$$ $a(i)$ is the average distance of point $i$ to other points in its
+cluster. $b(i)$ is the minimum of the set of average distances between
+point $i$ and other other points in different clusters. $s(i)$ ranges
+between $-1$ and $1$, higher values mean the observation is well matched
+to its cluster. Given any number of clusters, $k$, the average of $s(i)$
+across all observations will be an indicator of whether or not $k$ is
+good. A value above 0.70 is considered best, reasonable above 0.50, and
+weak above 0.25. we will use the `klaR` package to run k-modes on our
+data.
+
+## Hierarchical clustering (HC)
+Hierarchical clustering is a tree-based method. There are two flavors of HC:
+
+1. Agglomerative, which starts with all data points assigned their own clusters, and 
+
+2. Divisive, which starts with all data points assigned to a single cluster
+
+HC is similar to k-modes in that we must decide on the number of clusters based on silhouettes, the elbow method, or visual inspection of the dendrogram.  However, since we're using using categorical data we need to decide on a measure of distance which we take to be Gower's distance with weights set to 1, which is simply the total number of mismatches.
+
+$$d(i,j) = \frac{\sum_{k=1}^{n} w_k \cdot \delta_{ijk} \cdot d_{ijk}}{\sum_{k=1}^{n} w_k}$$
+
+Where:
+
+- **$n$** is the total number of features/variables in the dataset.
+- **$w_k$** is the weight assigned to feature $k$ (typically set to $1$ by default).
+- **$\delta_{ijk}$** is a binary indicator ($0$ or $1$) that drops to $0$ if either observation has a missing value (`NA`) for feature $k$, effectively ignoring it.
+- **$d_{ijk}$** is the specific partial distance calculated for feature $k$ based on its specific data type.
+
+However, as we move into higher dimensional data, Gower's distance fails and it's likely we'd need to resort to Multiple Correspondence Analysis (MCA) before running HC, this method is known as HCPC, or hierarchical clustering on principal components.
+
+## Finite Mixture Models (FMMs) 
+Probability-based cluster modeling has several advantages, as argued by
+@BouveyronCeleuxMurphyRaftery2019MCCDS. Although I will not list those
+advantages here, I'll say that probability-based clustering seems to
+perform comparably well to, and in many cases better than, non-probability models. Broadly, the FMMs is the following:
+
+$$f(x) = \sum_{k=1}^{K} \pi_k f_k(x)$$
+where 
+
+* $\pi_k$ represents the **mixing proportions** (the probability that a 
+randomly selected observation belongs to cluster $k$).
+* $f_k(x)$ represents the **component density** (the probability distribution 
+specific to cluster $k$).
+
+As with other clustering methods, in an unsupervised learning context, the total number of clusters, $K$, will need to be estimated.
+
+### All nominal variables
+When the categorical variables are all nominal, we use Latent Class Models (LCMs) as formulated in the `Rmixmod` R package.  Latent class analysis was first introduced by the Mathematical Sociologist Paul F. Lazarsfeld to analyze survey response patterns. 
+
+The set of responses from observation $i$ with $d$ categorical variables
+is denoted by $y_i$, each variable with, potentially, a different number
+of levels. $y_i$ is coded by the binary vector
+$\left( y_{i}^{jh};j=1,...,d;h=1,...,m_j\right)$ with
+
+$$
+y_i^{j h}=\begin{cases}1 & \text { if } y_i^j=h \\ 0 & \text { otherwise. }\end{cases}
+$$
+
+Data are modeled as a mixture of *G* multivariate multinomial
+distributions with probability distribution function
+[@BouveyronCeleuxMurphyRaftery2019MCCDS]
+
+$$
+f\left(y_i ; \theta\right)= \sum_{g=1}^G \tau_g \prod_{j, h}\left(\alpha_g^{j h}\right)^{y_i^{j h}}
+$$ where $\alpha_g^{jh}$ is the probability that variable $j$ has level
+$h$ if observation $i$ is in cluster $g$. And $\tau_g$ are the mixing
+proportions of the $G$ latent clusters.
+
+The log-likelihood is
+
+$$
+\mathcal{L}(\theta)=\mathcal{L}(\theta ; y)=\sum_{i=1}^n \log \left(\sum_{g=1}^G \tau_g \prod_{j=1}^d \prod_{h=1}^{m_j}\left(\alpha_g^{j h}\right)^{y_i^{j h}}\right)
+$$
+
+Conditioning on the latent *class* (i.e., cluster), $z = (z_1,...,z_G)$
+with $z_g = (z_{1g},...,z_{ng})$ and $z_{ig} = 1$ if $y_i$ is from
+cluster $g$ and $z_{ig} = 0$ otherwise, we get the complete-data
+log-likelihood
+
+$$
+\mathcal{L}_C(\theta)=\mathcal{L}(\theta ; y, z)=\sum_{i=1}^n \sum_{g=1}^G z_{i g} \log \left(\tau_g \prod_{j=1}^d \prod_{h=1}^{m_j}\left(\alpha_g^{j h}\right)^{y_i^{j h}}\right)
+$$ The complete-data log-likelihood is then reparameterized to define a
+family of five parsimonious LCMs based on five constraints on the
+parameters, as the following[^1]:
+
+[^1]: Technically, by "$\alpha$-probability" in the list of these five
+    models I mean specifically the "scatter" parameter that results from
+    the reparameterization of the complete-data log-likelihood which is
+    not shown in this article. Essentially, the "scatter" is a
+    reparameterizaiton of the probability $\alpha_g^{jh}$ that reflects
+    how the probabilities of the levels of a variable could differ from
+    the probability of the mode value of said variable. If you'd like
+    more details please see @BouveyronCeleuxMurphyRaftery2019MCCDS.
+
+1.  The $\alpha$-probability depends upon clusters, variables, and
+    variable levels.
+
+2.  The $\alpha$-probability depends upon clusters, variables, and
+    **not** variable levels.
+
+3.  The $\alpha$-probability depends upon clusters, **not** variables.
+
+4.  The $\alpha$-probability depends upon variables, **not** clusters,
+    and **not** variable levels.
+
+5.  The $\alpha$-probability is constant over variables and clusters.
+
+Additionally, the mixing proportions, $\tau_g$, can either be free or
+constant, with $\tau_g = p$ for all $g$. This leads to ten different
+constraints on the parameters. The ICL criterion will be used to select
+the best model and the number of clusters for it. @BouveyronCeleuxMurphyRaftery2019MCCDS favors
+ICL for clustering and BIC for density estimation.
+
+### Nominal and/or all ordinal
+We use a latent threshold model formulation as implemented in the the `clustMD` R package.
+
+The package handles ordinal variables by projecting them into an unobserved, continuous **latent space**. Let $\mathbf{z}_i = (z_{i1}, \dots, z_{iJ})'$ represent the hidden continuous vector for observation $i$ across $J$ dimensions. If observation $i$ is assigned to latent cluster $g$, its distribution is modeled as a multivariate Gaussian density:
+
+$$\mathbf{z}_i \mid \text{Cluster } g \sim \text{MVN}(\boldsymbol{\mu}_g, \boldsymbol{\Sigma}_g)$$
+
+To maintain computational feasibility during Monte Carlo EM optimization, the package restricts the latent covariance matrix $\boldsymbol{\Sigma}_g$ to a diagonal structure:
+
+$$\boldsymbol{\Sigma}_g = \text{diag}(\sigma_{g1}^2, \sigma_{g2}^2, \dots, \sigma_{gJ}^2)$$
+
+This means that within any single cluster, the latent variables are assumed to be independent, while their overall geometry is modified across groups according to the chosen `model` argument:
+
+*   **`model = "EII"` (Spherical, Equal Volume):** Constrains the covariance to:
+    $$\boldsymbol{\Sigma}_g = \sigma^2 \mathbf{I}_J$$
+    All variables share an identical variance, forcing clusters into rigid, circular shapes of equal volume across all groups.
+    
+*   **`model = "VII"` (Spherical, Variable Volume):** Constrains the covariance to:
+    $$\boldsymbol{\Sigma}_g = \sigma_g^2 \mathbf{I}_J$$
+    Variables within a cluster share the same variance, but the total volume (the scale of $\sigma_g^2$) can vary freely between different clusters.
+    
+*   **`model = "EEI"` (Diagonal, Equal Volume & Shape):** Constrains the covariance to:
+    $$\boldsymbol{\Sigma}_g = \boldsymbol{\Sigma} = \text{diag}(\sigma_1^2, \sigma_2^2, \dots, \sigma_J^2)$$
+    Variables can exhibit unique variances from one another (producing elliptical clusters), but this exact shape and volume profile is held constant across all groups.
+    
+*   **`model = "VVI"` (Diagonal, Variable Volume & Shape):** Unrestricted diagonal covariance given by:
+    $$\boldsymbol{\Sigma}_g = \text{diag}(\sigma_{g1}^2, \sigma_{g2}^2, \dots, \sigma_{gJ}^2)$$
+    This is the most flexible model, allowing every single variable in every individual cluster to scale its variance independently, yielding unique elliptical shapes and sizes for each group.
+
+
+# Measuring performance
+I use the **homogeneity score** to measure model performance. It is an information-theoretic cluster validation metric used to evaluate unsupervised machine learning models; specifically for this paper, predicted clusters against the true classes.
+A model satisfies perfect homogeneity ($h = 1.0$) if all of its predicted clusters contain only data points that are members of a single class. 
+
+The metric ignores over-clustering; it does not penalize a model for splitting a true class into multiple, highly pure sub-clusters. For example, our true class may be binary: customer purchased or not. However, the clustering model identifies  patterns such as cluster 1 = "18 to 24 year old's who browsed the online gaming section for more than 10 minutes" as a cluster.  Say there are 15 such patterns/subgroups that the clustering model identities.  We are concerned with the purity/homogeneity of these clusters; that is, being entirely, or mostly, "purchased" or "not purchased". If individuals with attributes in cluster 1 is close to 100% or 0% purchased then that is a good thing; what we don't want is something like 50% purchased in cluster 1. We are **not** concerned with, and will not penalize, the clustering model for finding 15 of these patterns/subgroups instead of only the 2, purchased vs not-purchased. What we care about is how well each cluster identifies with a single class.
+
+
+
+
+## Mathematical Formulation
+
+The formulation relies entirely on Shannon Entropy and Conditional Entropy to measure how much uncertainty about the true class labels ($C$) is removed given the predicted cluster assignments ($K$).
+
+### The Core Formula
+
+The formal mathematical definition of the homogeneity score ($h$) is:
+
+$$h = 1 - \frac{H(C \mid K)}{H(C)}$$
+
+Where:
+* $H(C)$ is the baseline entropy of the ground-truth classes.
+* $H(C \mid K)$ is the conditional entropy of the classes given the predicted clusters.
+
+### True Class Baseline Entropy $H(C)$
+
+This measures the inherent uncertainty or structural diversity of the true classes across the entire dataset:
+
+$$H(C) = - \sum_{c=1}^{|C|} \frac{n_c}{n} \log\left(\frac{n_c}{n}\right)$$
+
+where:  
+
+* $n$: Total number of data points in the dataset.  
+* $n_c$: Number of data points belonging to true class $c$.   
+* $\frac{n_c}{n}$: The probability that a randomly selected point belongs to class $c$.   
+
+
+### Conditional Entropy $H(C \mid K)$
+
+This tracks the remaining uncertainty about the true classes *after* inspecting the contents of the predicted clusters:
+
+$$H(C \mid K) = - \sum_{k=1}^{|K|} \sum_{c=1}^{|C|} \frac{n_{c,k}}{n} \log\left(\frac{n_{c,k}}{n_k}\right)$$
+
+Where:
+
+* $n_k$: Total number of points assigned to predicted cluster $k$.  
+* $n_{c,k}$: Number of points that belong to true class $c$ and were assigned to cluster $k$.  
+* $\frac{n_{c,k}}{n_k}$: The proportion of cluster $k$ that belongs to class $c$ (representing cluster purity).  
+
+
+## Boundary Behaviors
+
+* **Perfect Purity ($h = 1.0$):** If every cluster contains points from only one true class, then $\frac{n_{c,k}}{n_k} = 1$ for that class and $0$ for all others. Because $\log(1) = 0$, the conditional entropy drops to zero ($H(C \mid K) = 0$), yielding $h = 1 - 0 = 1.0$.
+
+* **Random Clustering ($h \approx 0.0$):** If a cluster assignment provides zero structural information, the distribution of classes inside each cluster mirrors the overall dataset. Thus, $H(C \mid K) = H(C)$, yielding $h = 1 - 1 = 0.0$.
+
+
+```{r faster_render_params, include=FALSE}
+# I set certain internal parameters that help me to render the R markdown faster by,
+# for example, skipping certain steps that I already ran. 
+# This is useful so that I don't need to rerun laborious steps when rendering the document.
+
+run_iris_fmm_modelselect <- FALSE 
+run_iris_fmm_best_model <- FALSE
+
+run_shroom_kmodes_bagging <- FALSE
+
+run_shroom_lcm_models <- FALSE
+```
+
+```{r libraries, warning=FALSE, include=FALSE}
+library(magrittr)
+library(knitr)
+library(MASS)
+library(klaR)
+library(ggplot2)
+library(gridExtra)
+library(FactoMineR)
+library(factoextra)
+library(corrplot)
+library(cluster)
+library(ClusterR) # For "mushroom" data
+library(GDAtools)
+library(Rmixmod)
+library(caret)
+library(kableExtra)
+library(mclust)
+library(clue)
+library(clustMD)
+library(future)
+library(furrr)
+library(vcd)
+library(viridis)
+main_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
+intermediates_dir <- file.path(main_dir,"data")
+if (!dir.exists(intermediates_dir)){
+  dir.create(intermediates_dir,recursive = TRUE)
+}
+```
+
+```{r helper_functions, message=FALSE, warning=FALSE, include=FALSE}
+plot_cluster_categorical_flexible <- function(
+    data, cluster_col, cat_col, use_gradient = FALSE,title = NA_character_) {
+  
+  plot_data <- data %>%
+    dplyr::count(.data[[cluster_col]], .data[[cat_col]]) %>%
+    dplyr::group_by(.data[[cluster_col]]) %>%
+    dplyr::mutate(percentage = n / sum(n) * 100)
+  
+  plot_title <- if (!is.na(title)) title else paste("Distribution of", cat_col, "by Cluster")
+  p <- ggplot(plot_data, aes(x = .data[[cluster_col]], y = percentage, fill = .data[[cat_col]])) +
+    geom_bar(stat = "identity", position = "stack", color = "white", linewidth = 0.3) + 
+    theme_minimal() +
+    labs(
+      title = plot_title,
+      x = "Clusters", 
+      y = "Percentage (%)"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid.major.x = element_blank()
+    )
+  
+  # Toggle color behavior based on argument
+  if (use_gradient) {
+    num_levels <- length(unique(plot_data[[cat_col]]))
+    level_colors <- colorRampPalette(c("#DCEEFF", "#08306B"))(num_levels)
+    p <- p + 
+      scale_fill_manual(values = level_colors) + 
+      labs(fill = "Levels (Light to Dark)")
+  } else {
+    p <- p + 
+      scale_fill_viridis_d(option = "turbo") + 
+      labs(fill = "Categories")
+  }
+  
+  return(p)
+}
+cluster_categorical_heatmap <- function(data,cluster_col,cat_cols,title = NA_character_){
+  long_df <- data %>%
+    dplyr::select(dplyr::all_of(c(cluster_col,cat_cols))) %>% 
+    tidyr::pivot_longer(
+      cols = cat_cols,
+      names_to = "Variable",
+      values_to = "Category_Level"
+    ) %>%
+    dplyr::count(!!rlang::sym(cluster_col), Variable, Category_Level) %>%
+    dplyr::group_by(!!rlang::sym(cluster_col), Variable) %>%
+    dplyr::mutate(Proportion = n / sum(n)) %>% 
+    # Convert Variable to a factor with levels matching cat_cols order
+    dplyr::mutate(Variable = factor(Variable, levels = cat_cols))
+  
+  plot_title <- if (!is.na(title)) title else "Cluster Profiles Across Categorical Variables"
+  
+  # Plot a grid of heatmaps 
+  ggplot(long_df, aes(x = !!rlang::sym(cluster_col), y = Category_Level, fill = Proportion)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "YlGnBu", direction = 1) +
+    facet_wrap(~Variable, scales = "free_y") + # Handles varying levels (2 to 10) per plot
+    theme_minimal() +
+    labs(
+      title = plot_title,
+      x = "Clusters",
+      y = "Category Levels"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      strip.background = element_rect(fill = "gray90")
+    )  
+}
+predict_kmodes <- function(model, newdata) {
+  # Custom predict function for k-modes (finds closest mode via simple matching distance)
+  modes <- model$modes  # Matrix of cluster modes
+  num_clusters <- nrow(modes)
+  num_obs <- nrow(newdata)
+  
+  # Initialize matrix to store distance from each row to each cluster mode
+  distances <- matrix(0, nrow = num_obs, ncol = num_clusters)
+  
+  # Calculate simple matching distance (count mismatches)
+  for (k in 1:num_clusters) {
+    # Compare each row of newdata to the k-th cluster mode profile
+    mismatches <- t(apply(newdata, 1, function(row) row != modes[k, ]))
+    distances[, k] <- rowSums(mismatches)
+  }
+  
+  # Assign to the cluster with the minimum distance (fewest mismatches)
+  assigned_clusters <- apply(distances, 1, which.min)
+  return(assigned_clusters)
+}
+calc_cramers_matrix <- function(df) {
+  n <- ncol(df)
+  mat <- matrix(1, nrow = n, ncol = n, dimnames = list(names(df), names(df)))
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      stat <- vcd::assocstats(table(df[[i]], df[[j]]))
+      mat[i, j] <- stat$cramer
+      mat[j, i] <- stat$cramer
+    }
+  }
+  return(mat)
+}
+
+```
+
+# Iris dataset
+
+The Iris dataset is a classic data frame introduced by British statistician Ronald Fisher in 1936, it is often used sanity-check basic functionality. 
+It consists of 150 observations split evenly across three distinct species of Iris flowers, Setosa, Versicolor, and Virginica. It comprises samples of four measurements:  Sepal.Length, Sepal.Width, Petal.Length, and Petal.Width.  For testing, we can pretend we don't know the species and use the four measurements to guess it. Since we're interested in clustering with categorical variables, let's recode the four numeric measurement variables. 
+variables.
+
+
+```{r iris_percentiles, echo=FALSE}
+iris_measurement_variables <- base::setdiff(colnames(iris),"Species")
+names(iris_measurement_variables) <- iris_measurement_variables
+
+iris_quantiles <-
+purrr::map(iris_measurement_variables,
+           function(x){
+             iris %>% 
+               dplyr::summarise(tibble::as_tibble_row(quantile(!!rlang::sym(x),probs=c(0.05,0.25,0.50,0.75,0.95))))
+           }
+           )
+
+iris_quantiles_df <- dplyr::bind_rows(iris_quantiles) 
+iris_quantiles_df$variable <- names(iris_quantiles)
+iris_quantiles_df <- dplyr::relocate(iris_quantiles_df,variable)
+kable(iris_quantiles_df,digits=1,col.names = c("",colnames(iris_quantiles_df)[-1]),caption="Iris percentiles")
+```
+
+We will create four levels for each variable based on the values of the quartiles. 
+
+```{r echo=FALSE,warning=FALSE}
+iris_no_species <-
+  iris %>% 
+  dplyr::select(-Species) %>% 
+  dplyr::mutate(sepal_length = dplyr::case_when(Sepal.Length < 5.1 ~ "Low",
+                                                Sepal.Length >= 5.1 & Sepal.Length < 5.8 ~ "Medium",
+                                                Sepal.Length >= 5.8 & Sepal.Length < 6.4 ~ "Medium-High",
+                                                Sepal.Length >= 6.4 ~ "High"
+                                                  ),
+                
+                sepal_width = dplyr::case_when(Sepal.Width < 2.8 ~ "Low",
+                                               Sepal.Width >= 2.8 & Sepal.Width < 3.0 ~ "Medium",
+                                               Sepal.Width >= 3.0 & Sepal.Width < 3.3 ~ "Medium-High",
+                                               Sepal.Width >= 3.3 ~ "High"
+                                                      ),
+                
+                petal_length = dplyr::case_when(Petal.Length < 1.60 ~ "Low",
+                                                Petal.Length >= 1.60 & Petal.Length < 4.35 ~ "Medium",
+                                                Petal.Length >= 4.35 & Petal.Length < 5.10 ~ "Medium-High",
+                                                Petal.Length >= 5.10 ~ "High"),
+                
+                petal_width = dplyr::case_when(Petal.Width < 0.3 ~ "Low",
+                                               Petal.Width >= 0.30 & Petal.Width < 1.30 ~ "Medium",
+                                               Petal.Width >= 1.30 & Petal.Width < 1.80 ~ "Medium-High",
+                                               Petal.Width >= 1.80 ~ "High")
+                )
+                
+iris_recode <-
+  iris_no_species %>% 
+  dplyr::select(sepal_length,sepal_width,petal_length,petal_width) %>% 
+  dplyr::mutate(dplyr::across(dplyr::everything(),factor,levels=c("Low","Medium","Medium-High","High")))
+```
+
+The data is recoded to "Low","Medium","Medium-High","High".
+
+```{r echo=FALSE, warning=FALSE}
+iris_recode_col_names <-  colnames(iris_recode) 
+names(iris_recode_col_names) <- iris_recode_col_names
+
+iris_counts_of_recode <-
+  purrr::map(iris_recode_col_names,
+            function(x){
+              iris_recode %>% 
+                dplyr::count(!!rlang::sym(x)) %>% 
+                dplyr::arrange(!!rlang::sym(x)) %>% 
+                tidyr::pivot_wider(names_from = x,
+                                   values_from = "n") %>% 
+                dplyr::mutate(variable = x)
+              
+            })
+
+iris_counts_of_recode_df <- 
+  dplyr::bind_rows(iris_counts_of_recode) %>% 
+  dplyr::relocate(variable)
+
+knitr::kable(iris_counts_of_recode_df,
+             col.names = c("Recode Variable",colnames(iris_counts_of_recode_df)[-1]),
+             caption = "Counts of four iris categorical variables")
+
+```
+
+## Iris: k-modes
+
+We use `factoextra::fviz_nbclust()` to get silhouette scores for 8
+clusters. This function returns a plot of average silhouette scores by cluster, among other things.
+
+If we ignore the ordinal nature of the measurement variables, which we can do by specifying the Gower distance in the `diss` argument of `factoextra::fviz_nbclust()`, then k-modes fails badly.
+
+```{r echo=TRUE, warning=FALSE}
+gower_dist <- cluster::daisy(iris_recode, metric = "gower")
+set.seed(45)
+iris_k_modes_silhouette_nom <- factoextra::fviz_nbclust(
+  iris_recode,
+  FUNcluster = klaR::kmodes,
+  method = "silhouette",
+  diss = gower_dist,
+  k.max = 8
+  )
+
+iris_recode_integers <- iris_recode %>% 
+    dplyr::mutate(dplyr::across(dplyr::everything(),as.integer))
+set.seed(45)
+iris_k_modes_silhouette_ord <- factoextra::fviz_nbclust(
+  iris_recode_integers,
+  FUNcluster = klaR::kmodes,
+  method = "silhouette",
+  k.max = 8
+  )
+```
+
+```{r echo=FALSE}
+grid.arrange(
+  iris_k_modes_silhouette_nom,
+  iris_k_modes_silhouette_ord,
+  ncol = 2,
+  top = "Iris recode Silhouette scores: Gower (Left) vs Euclidean (Right)"
+  )
+```
+
+Treating the measurements naturally, as ordinal variables, suggests 3 clusters, while ignoring the ordinal nature of the measurements suggests more than twice the number of clusters.
+
+Know that passing the data as integers or as factors into `klaR::kmodes()` doesn't really matter in general, and certainly not for us here, since the function uses the Hamming distance which is based on matches and mismatches of values.
+
+```{r echo=TRUE}
+## Optimal number of clusters if treating as nominal
+set.seed(45)
+iriscat_kmodes_nom_45 <- klaR::kmodes(
+  iris_recode,7,iter.max = 1000
+  )
+## Optimal number of clusters if treating as ordinal
+set.seed(45)
+iriscat_kmodes_ord_45 <- klaR::kmodes(
+  iris_recode,3,iter.max = 1000
+  )
+```
+
+```{r echo=FALSE}
+iris_performance <- dplyr::tibble(
+  method_name = "k-modes",
+  variables = "nominal",
+  parameters = "k=7",
+  rand.seed = "45",
+  homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_nom_45$cluster) %>% round(.,2)
+  )
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "k-modes",
+      variables = "ordinal",
+      parameters = "k=3",
+      rand.seed = "45",
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_ord_45$cluster) %>% round(.,2)
+    )
+  )
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+```
+
+Since k-modes, like k-means, can be sensitive to the (random) starting point, we will try a
+different (random) starting point, `set.seed(323)`.
+
+```{r echo=FALSE}
+set.seed(323)
+iriscat_kmodes_323 <- klaR::kmodes(
+  iris_recode,3,iter.max = 1000)
+iris_pred_table <- table(iris$Species,iriscat_kmodes_323$cluster)
+knitr::kable(
+  iris_pred_table,
+  caption="Iris recode: 3-cluster k-modes starting at `set.seed(323)`.")
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "k-modes",
+      variables = "ordinal",
+      parameters = "k=3",
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) %>% round(.,2)
+      )
+    )
+set.seed(323)
+iriscat_kmodes_323 <- klaR::kmodes(
+  iris_recode,7,iter.max = 1000)
+iris_pred_table <- table(iris$Species,iriscat_kmodes_323$cluster)
+knitr::kable(
+  iris_pred_table,
+  caption="Iris recode: 7-cluster k-modes starting at `set.seed(323)`.")
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "k-modes",
+      variables = "nominal",
+      parameters = "k=7",
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) %>% round(.,2)
+      )
+    )
+
+
+
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+```
+
+This leads to an important question, what level of performance should we expect? We use bagging to provide a better estimate, using 7 cluster model that we got when ignoring the ordinal nature of the variables.
+
+```{r iris_kmodes_bagging, echo=TRUE}
+set.seed(323)
+num_bootstrap <- 100
+num_clusters  <- 7
+
+boot_models <- lapply(1:num_bootstrap, function(i,x = iris_recode) {
+  # Sample row indices with replacement (Bagging)
+  boot_idx  <- sample(1:nrow(x), replace = TRUE)
+  boot_data <- x[boot_idx, ]
+  
+  # Fit k-modes on bootstrap data
+  km <- klaR::kmodes(boot_data, modes = num_clusters)
+  
+  # Predict back on the original data layout and cast to a CLUE partition
+  # This standardizes the labels so they can be averaged
+  
+  predicted_vector <- predict_kmodes(km, x)
+  
+  partition_object <- as.cl_partition(predicted_vector)
+  
+  return(partition_object)
+  
+})
+
+# Bind predictions into a single Cluster Ensemble object
+ensemble_bag <- clue::cl_ensemble(list = boot_models)
+
+# Extract Consensus via soft/hard averaging (Default: Euclidean consensus)
+ensemble_bag_consensus <- clue::cl_consensus(ensemble_bag)
+
+# Extract final hard cluster assignments
+iris_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
+
+```
+
+```{r echo=FALSE}
+table(iris$Species, iris_kmodes_bagged_preds) %>% 
+  knitr::kable(
+    .,
+    caption="Bagged 7 cluster 7 modes: truth vs predicted"
+  )
+
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "bagged k-modes",
+      variables = "nominal",
+      parameters = "k=7,iter=100",
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iris_kmodes_bagged_preds) %>% round(.,2)
+      )
+    )
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+```
+
+So starting from a "bad seed" bagging ensured better performance relative  to any single k-mode model.
+
+## Iris: HC
+Let's start with agglomerative hierarchical clustering.
+```{r iris_hc_agg, echo=TRUE}
+iris_gower <- cluster::daisy(iris_recode,metric = "gower")
+set.seed(323)
+grid.arrange(
+  factoextra::fviz_nbclust(as.matrix(iris_gower), kmeans, method = "silhouette"),
+  factoextra::fviz_nbclust(as.matrix(iris_gower), kmeans, method = "wss"),
+  ncol = 2,
+  top = "Agglomerative Hierarchical Clustering \n
+  Iris recode: Gower's Distances with weights 1"
+  )
+set.seed(323)
+iris_hc <- stats::hclust(iris_gower, method = "ward.D2")
+plot(iris_hc) 
+rect.hclust(iris_hc, k = 5, border = "red")
+iris_hc_classes <- stats::cutree(iris_hc, k = 5)
+```
+
+```{r echo=FALSE}
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "HC-AGG",
+      variables = "nominal",
+      parameters = "k=5,ward.D2",
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iris_hc_classes) %>% round(.,2)
+      )
+    )
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+```
+
+Now, divisive hierarchical clustering.
+
+```{r iris_hc_div, echo=TRUE}
+set.seed(323)
+iris_hc_div <- cluster::diana(iris_gower)
+plot(
+  iris_hc_div, which.plots = 2, labels=FALSE, 
+  main = "Divisive Clustering on Categorical Data")
+rect.hclust(as.hclust(iris_hc_div), k = 5, border = "red")
+iris_hc_div_classes <- stats::cutree(as.hclust(iris_hc_div), k = 5)
+```
+
+```{r echo=FALSE}
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "HC-DIV",
+      variables = "nominal",
+      parameters = "k=5",
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iris_hc_div_classes) %>% round(.,2)
+      )
+    )
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+```
+
+## Iris: LCM
+We start by using the ICL criterion to find the best of 10 possible
+models. We loop over each model using `Rmixmod::mixmodCluster()` and 8
+clusters for each.
+
+```{r echo=TRUE}
+names_possible_models <- c("Binary_p_E","Binary_p_Ej", "Binary_p_Ek",
+                           "Binary_p_Ekj","Binary_p_Ekjh","Binary_pk_E",
+                           "Binary_pk_Ej","Binary_pk_Ek","Binary_pk_Ekj",
+                           "Binary_pk_Ekjh")
+
+names(names_possible_models) <- names_possible_models
+set.seed(323)
+iris_lcm_models <-
+  purrr::map(names_possible_models,function(x){
+    res <- Rmixmod::mixmodCluster(
+      iris_recode,
+      nbCluster = 1:8,
+      dataType = "qualitative",
+      model = Rmixmod::mixmodMultinomialModel(listModels = x),
+      criterion = c("ICL")
+      )
+    res
+  }
+  )
+```
+
+Now we get the ICL values by cluster then plot.
+
+```{r echo=TRUE}
+set.seed(323)
+iris_lcm_models_lcl <-
+  purrr::map(
+    names_possible_models,function(model_name){
+      
+      this_model_results <- iris_lcm_models[[model_name]]
+      
+      this_model_nbcluster <- 
+        purrr::map_int(1:8,function(x = .x){
+          this_model_results@results[[x]]@nbCluster[1]  
+        })
+      
+      this_model_icl <-
+        purrr::map_dbl(1:8,function(x = .x){
+          this_model_results@results[[x]]@criterionValue[1]
+        })*-1
+      
+      dplyr::tibble(num_clusters = this_model_nbcluster,
+                    icl = this_model_icl) %>% 
+        dplyr::rename(!!model_name := icl)
+    }
+    
+    
+  )
+```
+
+```{r echo=FALSE}
+iris_lcm_models_lcl_df <- purrr::reduce(
+  iris_lcm_models_lcl,
+  dplyr::left_join,
+  by="num_clusters"
+  )
+# par(mar=c(1,1,1,1))
+
+model_colors <- c(
+  "Binary_p_E"="black","Binary_p_Ej"="red","Binary_p_Ek"="green",
+  "Binary_p_Ekj"="blue","Binary_p_Ekjh"="purple",
+  
+  "Binary_pk_E"="black","Binary_pk_Ej"="red","Binary_pk_Ek"="green",
+  "Binary_pk_Ekj"="blue","Binary_pk_Ekjh"="purple"
+  )
+
+model_linetypes <- c(
+  "Binary_p_E"="solid","Binary_p_Ej"="solid","Binary_p_Ek"="solid",
+  "Binary_p_Ekj"="solid","Binary_p_Ekjh"="solid",
+  
+  "Binary_pk_E"="dashed","Binary_pk_Ej"="dashed",
+  "Binary_pk_Ek"="dashed","Binary_pk_Ekj"="dashed","Binary_pk_Ekjh"="dashed")
+
+plot_base <-
+  ggplot(data=iris_lcm_models_lcl_df, 
+         aes(x=num_clusters))
+
+plot_all_lines <-
+  purrr::reduce(names_possible_models,function(p,model_name){
+
+  p +
+    geom_line(aes(y = rlang::eval_tidy(rlang::sym(model_name)),
+                  colour = model_name),
+              linetype = model_linetypes[model_name]) + 
+    geom_point(aes(y =  rlang::eval_tidy(rlang::sym(model_name))),
+               shape = 0)
+},
+.init = plot_base)
+
+plot_final <-
+  plot_all_lines +
+  scale_color_manual(name = "Models",
+                     values = model_colors) +
+  scale_x_continuous(breaks=seq(1,8,1)) +
+  xlab(label = "Number of clusters") +
+  ylab(label = "") +
+  labs(
+    title = "ICL of 10 Latent Class Models",
+    subtitle = "Iris recoded categorical data"
+  ) +
+  theme_minimal()   
+
+plot_final
+```
+
+The best model is `Binary_p_Ejkh` at 3 clusters. This corresponds to the
+(parsimonous) LCM with a constant mixing proportion between the 3
+clusters (i.e., $\frac{1}{3}$) and with $\alpha$-probabilities (i.e.,
+technically the scatter) that vary with cluster, variable, and variable
+level. We pull the results of the best LCM model and compare clusters
+against iris Species.
+
+```{r echo=TRUE}
+iris_lcm_models_best <- iris_lcm_models[["Binary_p_Ekjh"]]@bestResult 
+```
+
+```{r echo=FALSE}
+table(iris$Species,iris_lcm_models_best@partition) %>% 
+  knitr::kable(.,caption = "Iris species vs. cluster estimated from  Binary_p_Ekjh LCM")
+
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "LCM",
+      variables = "nominal",
+      parameters = paste0(
+        "k=",
+        iris_lcm_models_best@nbCluster,
+        ",",
+        iris_lcm_models_best@model,collapse = ""),
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iris_lcm_models_best@partition) %>% round(.,2)
+      )
+    ) %>% 
+  dplyr::arrange(dplyr::desc(homo_score))
+knitr::kable(
+  iris_performance,
+  caption="Iris: Methods performance")
+
+```
+
+## Iris: FMM
+Now, let's respect the ordinal nature of the measurement variables. The `clustMD` package uses a latent threshold (or latent continuous) framework where observed categorical variables (e.g., ordinal) are assumed to be manifestations of an underlying continuous multivariate Gaussian latent vector. Let's start with model selection.
+
+```{r include=FALSE}
+############
+## Because EM algorithm has random starting point, you are likely to get stuck in a local optimal
+## To get a better sense of the global optimal, repeat at different random starting points to find the highest
+## log likelihood  
+############
+# Stabilized Single-Model Wrapper Function
+fit_stable_clustMD <- function(X, G, model_type, n_starts = 10) {
+  best_fit <- NULL
+  best_loglik <- -Inf
+  
+  for (s in 1:n_starts) {
+    # Set a local seed that advances sequentially per start loop
+    set.seed(1000 * G + s) 
+    
+    fit <- tryCatch({
+      clustMD(
+        X = X, G = G, CnsIndx = 0, OrdIndx = ncol(X),
+        Nnorms = 500, MaxIter = 100, model = model_type,
+        startCL = "random"
+      )
+    }, error = function(e) NULL)
+    
+    # Track and keep only the iteration with the highest Log-Likelihood
+    if (!is.null(fit) && !is.null(fit$likelihood)) {
+      current_loglik <- tail(fit$likelihood, 1) # Get final converged log-lik
+      if ( base::isTRUE(current_loglik > best_loglik) ) {
+        best_loglik <- current_loglik
+        best_fit <- fit
+      }
+    }
+  }
+  return(best_fit) # Returns the global maximum across the n_starts
+}
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+iris_md_matrix <- iris_recode %>%
+  dplyr::mutate(across(everything(), ~ as.numeric(
+    factor(., 
+           levels = c("Low", "Medium", "Medium-High", "High"), 
+           ordered = TRUE
+           )))) %>%
+  as.matrix()
+# Takes 10 minutes or so to complete
+# Can skip if results are already available/saved
+if (run_iris_fmm_modelselect){
+  # Since we have only nominal/ordinal variables,
+  #  we don't need to try all 6 models
+  # tested_models <- c("EII","VII","EEI","VVI","VEI","EVI")
+  tested_models <- c("EII", "VII", "EEI", "VVI")
+  tested_n_clusters <- 2:8
+  
+  # Create every unique combination of model type and number of clusters
+  search_grid <- base::expand.grid(
+    Model = tested_models, G = tested_n_clusters, stringsAsFactors = FALSE)
+  
+  # Run the iterative loop over the grid
+  set.seed(323)
+  model_selection_results <- purrr::map_dfr(1:nrow(search_grid), function(i) {
+    current_model <- search_grid$Model[i]
+    current_g     <- search_grid$G[i]
+    
+    #Safeguard the loop against estimation convergence errors using tryCatch
+    fit <- fit_stable_clustMD(
+      X = iris_md_matrix,
+      G = current_g,
+      model_type = current_model
+      )
+  
+    # If model successfully converged, extract metrics; otherwise return NA
+    if (!is.null(fit)) {
+      data.frame(
+        Model = current_model,
+        Clusters = current_g,
+        ICL = fit$ICLhat
+      )
+    } else {
+      data.frame(Model = current_model, Clusters = current_g, ICL = NA)
+    }
+  })
+best_icl <- model_selection_results %>% dplyr::arrange(desc(ICL))  
+dir.create(file.path(intermediates_dir,"iris","fmm"),recursive = TRUE)
+saveRDS(best_icl,file.path(intermediates_dir,"iris","fmm","best_icl.rds"))
+} else {
+  best_icl <- readRDS(file.path(intermediates_dir,"iris","fmm","best_icl.rds"))
+}
+best_icl <- best_icl %>%
+  dplyr::filter(!is.na(ICL)) %>% 
+  dplyr::arrange(desc(ICL)) 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+best_icl_point <- best_icl %>% dplyr::slice(1)
+
+# Construct the optimization profile plot
+icl_grid_plot <- ggplot(best_icl, aes(x = Clusters, y = ICL, color = Model, group = Model)) +
+  # Continuous profile lines per covariance framework
+  geom_line(linewidth = 1, alpha = 0.8) +
+  # Points on specific evaluation steps
+  geom_point(size = 2.5) +
+  # Axis configuration matching your exact cluster range
+  scale_x_continuous(breaks = unique(best_icl$Clusters)) +
+  # Clean, standard color palette
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 14)
+  ) +
+  labs(
+    title = "Model Selection via Integrated Classification Likelihood (ICL)",
+    subtitle = "Higher ICL scores indicate better group separation and parsimony",
+    x = "Number of Clusters (G)",
+    y = "ICL Estimate (Closer to Zero is Better)",
+    color = "Covariance Structure:"
+  )
+
+# Display the clean plot
+print(icl_grid_plot)
+```
+Some points not shown because the model didn't converge within the maximum number of iterations that we specified for the given number of clusters. The best FMM model over our grid search is `r best_icl_point$Model` with `r best_icl_point$Clusters`. 
+
+```{r echo=FALSE, message=TRUE, warning=FALSE}
+set.seed(323)
+if (run_iris_fmm_best_model){
+  # Fit the clustMD model with random initialization overrides
+iris_fmm_best_fit <- fit_stable_clustMD(
+  X = iris_md_matrix,
+  G = best_icl_point$Clusters,
+  model_type = best_icl_point$Model,
+  n_starts = 50
+  )
+  saveRDS(iris_fmm_best_fit,file.path(intermediates_dir,"iris","fmm","iris_fmm_best_fit.rds"))
+
+} else {
+  
+  iris_fmm_best_fit <- readRDS(file.path(intermediates_dir,"iris","fmm","iris_fmm_best_fit.rds"))
+  
+}
+
+iris_performance <- iris_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "FMM",
+      variables = "ordinal",
+      parameters = paste0(c("k=",best_icl_point$Clusters,",",best_icl_point$Model),collapse = ""),
+      rand.seed = "323",
+      homo_score = clevr::homogeneity(iris$Species, iris_fmm_best_fit$cl) %>% round(.,2)
+    )
+  ) %>% 
+  dplyr::arrange(dplyr::desc(homo_score))
+
+iris_performance %>% 
+  knitr::kable(
+    .,caption = "Iris: Model Performance")
+
+```
+
+## Iris: Cluster charts
+Although LCM chooses the correct number of clusters, the HC-DIV model results in the greatest or homogeneity, or cluster purity.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+iris_recode$cluster <- iris_hc_div_classes
+iris_recode$true_class <- iris$Species
+iris_recode <- iris_recode %>% dplyr::relocate(true_class)
+columns_for_clustering <- setdiff(
+  colnames(iris_recode),
+  "cluster")
+my_plots <- purrr::map(
+  columns_for_clustering,
+  ~ plot_cluster_categorical_flexible(
+    data = iris_recode,
+    cluster_col = "cluster",
+    cat_col = .x,
+    use_gradient = F,
+    title = .x
+  ))
+for( i in seq(1,length(my_plots),2) ){
+  j <- min(i+1,length(my_plots))
+  if (j == i) these_plots <- my_plots[c(i)] else these_plots <- my_plots[c(i,j)]
+  do.call(
+    "grid.arrange",
+    list(
+      grobs = these_plots,
+      nrow = 2,
+      top = "HC-DIV k=5"))
+}
+```
+
+\newpage
+\begin{landscape}
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='80%', fig.align='center', fig.show='hold'}
+iris_recode$cluster <- iris_hc_div_classes
+iris_recode$true_class <- iris$Species
+iris_recode <- iris_recode %>% dplyr::relocate(true_class)
+cluster_categorical_heatmap(
+  data = iris_recode,
+  cluster_col = "cluster",
+  cat_cols = setdiff(colnames(iris_recode),"cluster"),
+  title = "HC-DIV k=5"
+)
+iris_recode$cluster <- iris_lcm_models_best@partition
+cluster_categorical_heatmap(
+  data = iris_recode,
+  cluster_col = "cluster",
+  cat_cols = setdiff(colnames(iris_recode),"cluster"),
+  title = "LCM k=3,Binary_p_Ekjh"
+)
+```
+
+\end{landscape}
+\newpage
+
+# Mushroom dataset
+The mushroom dataset contains physical characteristics of mushrooms (8,124 instances, 22 attributes) classified as edible or poisonous. Every single feature is categorical (e.g., cap shape, gill color), making it great for our needs.
+
+
+```{r echo=FALSE}
+data("mushroom",package = "ClusterR")
+str_output <- capture.output(str(mushroom))
+str_df <- data.frame(Structure = str_output)
+knitr::kable(str_df, caption = "Structure of Mushroom Dataset")
+```
+
+
+```{r factor-summary-table, echo=FALSE, message=FALSE, warning=FALSE}
+# 1. Exhaustive variable-specific dictionary mapping for all 22 features
+mushroom_dict <- c(
+  # Cap attributes
+  "cap_shape_b" = "bell", "cap_shape_c" = "conical", "cap_shape_x" = "convex", 
+  "cap_shape_f" = "flat", "cap_shape_k" = "knobbed", "cap_shape_s" = "sunken",
+  "cap_surface_f" = "fibrous", "cap_surface_g" = "grooves", "cap_surface_y" = "scaly", "cap_surface_s" = "smooth",
+  "cap_color_n" = "brown", "cap_color_b" = "buff", "cap_color_c" = "cinnamon", "cap_color_g" = "gray", 
+  "cap_color_r" = "green", "cap_color_p" = "pink", "cap_color_u" = "purple", "cap_color_e" = "red", 
+  "cap_color_w" = "white", "cap_color_y" = "yellow",
+  
+  # Structural indicators & Odor
+  "bruises_t" = "bruises", "bruises_f" = "no",
+  "odor_a" = "almond", "odor_l" = "anise", "odor_c" = "creosote", "odor_y" = "fishy", 
+  "odor_f" = "foul", "odor_m" = "musty", "odor_n" = "none", "odor_p" = "pungent", "odor_s" = "spicy",
+  
+  # Gill attributes
+  "gill_attachment_a" = "attached", "gill_attachment_d" = "descending", 
+  "gill_attachment_f" = "free", "gill_attachment_n" = "notched",
+  "gill_spacing_c" = "close", "gill_spacing_w" = "crowded", "gill_spacing_d" = "distant",
+  "gill_size_b" = "broad", "gill_size_n" = "narrow",
+  "gill_color_k" = "black", "gill_color_n" = "brown", "gill_color_b" = "buff", "gill_color_h" = "chocolate", 
+  "gill_color_g" = "gray", "gill_color_r" = "green", "gill_color_o" = "orange", "gill_color_p" = "pink", 
+  "gill_color_u" = "purple", "gill_color_e" = "red", "gill_color_w" = "white", "gill_color_y" = "yellow",
+  
+  # Stalk attributes
+  "stalk_shape_e" = "enlarging", "stalk_shape_t" = "tapering",
+  "stalk_root_b" = "bulbous", "stalk_root_c" = "club", "stalk_root_u" = "cup", 
+  "stalk_root_e" = "equal", "stalk_root_z" = "rhizomorphs", "stalk_root_r" = "rooted", "stalk_root_?" = "missing",
+  "stalk_surface_above_ring_f" = "fibrous", "stalk_surface_above_ring_y" = "scaly", 
+  "stalk_surface_above_ring_k" = "silky", "stalk_surface_above_ring_s" = "smooth",
+  "stalk_surface_below_ring_f" = "fibrous", "stalk_surface_below_ring_y" = "scaly", 
+  "stalk_surface_below_ring_k" = "silky", "stalk_surface_below_ring_s" = "smooth",
+  "stalk_color_above_ring_n" = "brown", "stalk_color_above_ring_b" = "buff", "stalk_color_above_ring_c" = "cinnamon", 
+  "stalk_color_above_ring_g" = "gray", "stalk_color_above_ring_o" = "orange", "stalk_color_above_ring_p" = "pink", 
+  "stalk_color_above_ring_e" = "red", "stalk_color_above_ring_w" = "white", "stalk_color_above_ring_y" = "yellow",
+  "stalk_color_below_ring_n" = "brown", "stalk_color_below_ring_b" = "buff", "stalk_color_below_ring_c" = "cinnamon", 
+  "stalk_color_below_ring_g" = "gray", "stalk_color_below_ring_o" = "orange", "stalk_color_below_ring_p" = "pink", 
+  "stalk_color_below_ring_e" = "red", "stalk_color_below_ring_w" = "white", "stalk_color_below_ring_y" = "yellow",
+  
+  # Veil & Ring attributes
+  "veil_type_p" = "partial", "veil_type_u" = "universal",
+  "veil_color_n" = "brown", "veil_color_o" = "orange", "veil_color_w" = "white", "veil_color_y" = "yellow",
+  "ring_number_n" = "none", "ring_number_o" = "one", "ring_number_t" = "two",
+  "ring_type_c" = "cobwebby", "ring_type_e" = "evanescent", "ring_type_f" = "flaring", 
+  "ring_type_l" = "large", "ring_type_n" = "none", "ring_type_p" = "pendant", 
+  "ring_type_s" = "sheathing", "ring_type_z" = "zone",
+  
+  # Spore, Population, & Habitat attributes
+  "spore_print_color_k" = "black", "spore_print_color_n" = "brown", "spore_print_color_b" = "buff", 
+  "spore_print_color_h" = "chocolate", "spore_print_color_r" = "green", "spore_print_color_o" = "orange", 
+  "spore_print_color_u" = "purple", "spore_print_color_w" = "white", "spore_print_color_y" = "yellow",
+  "population_a" = "abundant", "population_c" = "clustered", "population_n" = "numerous", 
+  "population_s" = "scattered", "population_v" = "several", "population_y" = "solitary",
+  "habitat_g" = "grasses", "habitat_l" = "leaves", "habitat_m" = "meadows", 
+  "habitat_p" = "paths", "habitat_u" = "urban", "habitat_w" = "waste", "habitat_d" = "woods"
+)
+
+# 2. Reshape and safely map descriptions via custom namespace prefixes
+all_factor_summary <- mushroom %>%
+  dplyr::select(-class) %>% 
+  tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Level") %>%
+  dplyr::group_by(Variable, Level) %>%
+  dplyr::summarise(Count = dplyr::n(), .groups = "drop_last") %>%
+  dplyr::mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  dplyr::arrange(Variable, dplyr::desc(Count)) %>%
+  dplyr::ungroup() %>%
+  # Construct variable-specific lookup targets to drop collisions completely
+  dplyr::mutate(
+    Level = as.character(Level),
+    Lookup_Key = paste0(Variable, "_", Level),
+    Description = mushroom_dict[Lookup_Key],
+    Level_Expanded = dplyr::if_else(!is.na(Description), paste0(Level, " (", Description, ")"), Level),
+    Percentage = sprintf("%.1f%%", Percentage)
+  ) %>%
+  dplyr::select(Variable, Level_Expanded, Count, Percentage)
+
+# 3. Build a beautiful, nested table using kableExtra layout engines
+all_factor_summary %>%
+  knitr::kable(
+    format = "latex",
+    longtable = TRUE, 
+    booktabs = TRUE,
+    col.names = c("Mushroom Feature", "Factor Level Value", "Count (N)", "Distribution (%)"),
+    caption = "Exhaustive Summary Profile of All Categorical Features",
+    align = "llrr"
+  ) %>%
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "left"
+  ) #%>%
+  # kableExtra::collapse_rows(columns = 1, valign = "top")
+
+```
+
+## Mushroom: Feature engineering
+Unlike the Iris data, Mushrooms data is relatively more messy. This can adversely affect our clustering results by adding noise. We must clean the data before clustering.
+
+```{r echo=FALSE}
+mushroom %>% dplyr::select(-class) %>% 
+  dplyr::summarise(dplyr::across(dplyr::everything(),~ sum(is.na(.x)))) %>% 
+  tidyr::pivot_longer(.,
+                      dplyr::everything(),
+                      names_to = "variable_name",
+                      values_to = "num_missing") %>% 
+  dplyr::arrange(dplyr::desc(num_missing)) %>% 
+  knitr::kable(
+    .,
+    caption="Mushroom data"
+  )
+```
+
+There is no missing data.
+
+We may consider removing or regrouping variables with "low" or "high" cell counts.  Certainly, variables with constant values are of no value as they only complicate the process of find good results.
+
+```{r echo=FALSE}
+all_factor_summary$percentage <- as.numeric(gsub("%", "", all_factor_summary$Percentage)) / 100
+all_factor_summary %>% 
+  dplyr::filter(percentage > 0.90) %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom data, more than 90% in a cell"
+  )
+mushroom_clean <- mushroom %>% dplyr::select(-veil_type)
+```
+
+Remove **`veil_type`** since it doesn't have any variation and, therefore, doesn't add any useful information for determining clusters. Let's investigate the other variables that were flagged.
+
+```{r echo=FALSE}
+all_factor_summary %>% 
+  dplyr::filter(Variable == "gill_attachment") %>% dplyr::select(-percentage) %>% 
+  knitr::kable(
+    .
+  )
+all_factor_summary %>% 
+  dplyr::filter(Variable == "veil_color") %>% dplyr::select(-percentage) %>% 
+    knitr::kable(
+    .
+  )
+all_factor_summary %>% 
+  dplyr::filter(Variable == "ring_number") %>% dplyr::select(-percentage) %>%  
+    knitr::kable(
+    .
+  )
+
+cv_matrix <- calc_cramers_matrix(mushroom_clean %>% dplyr::select(-class))
+  
+```
+
+
+```{r correlation_plot, echo=FALSE, fig.height=10, fig.width=10, message=FALSE, warning=FALSE}
+# Generate the plot optimized for R Markdown
+accessible_colors <- colorRampPalette(c("#E8EFF7", "#A6C8E0", "#FE6100", "#D55E00"))(100)
+
+corrplot(
+  cv_matrix, 
+  method = "color",            
+  type = "upper",              # Only show top triangle to reduce visual clutter
+  order = "hclust",            # Cluster similar features together automatically
+  col = viridis(100),          # Color blind friendly
+  # col = accessible_colors, # also color blind friendly
+  is.corr = FALSE,
+  cl.lim = c(0, 1),            # Cramér's V scales strictly from 0 to 1
+  tl.col = "black",            
+  tl.srt = 45,                
+  addCoef.col = "black",       # Overlay numeric values on the plot
+  number.cex = 0.65,           
+  diag = FALSE
+)
+```
+
+While the original Audubon Field Guide provides an unweighted checklist of traits, subsequent algorithmic analysis demonstrates that the feature space is heavily anchored by a single variable: **`odor`** [@lantz_machine_2013]. Rule-induction and decision tree models consistently leverage `odor` as the root partition due to its high mutual information content with the underlying biological structures [@lantz_machine_2013]. 
+
+When analyzing this data in an unsupervised context (with the **`class`** column removed), the 9 unique odor labels compress into 4 primary behavior clusters based on how they naturally align with secondary physical traits:
+
+1. **The Chemical Warnings:** Foul, fishy, spicy, and pungent mushrooms. These present high structural similarity and map almost exclusively to poisonous species.
+2. **The Sweet Aromas:** Almond and anise mushrooms. These hold highly specific cap/ring structures and map uniformly to edible profiles.
+3. **The Neutrals:** Odorless mushrooms. This is the largest group in the dataset. Because they lack a distinct smell, they form a massive, mixed profile that must rely on secondary features (like spore print color) to segment further.
+4. **The Outliers:** Creosote and musty mushrooms. These capture tiny, niche biological variations that do not cleanly align with the other three major groups.
+
+Therefore, initializing an unsupervised algorithm (such as K-Modes) with `modes = 4` serves logical baseline for initial feature investigation.
+
+```{r shroom_feature_importance, echo=FALSE, message=FALSE, warning=FALSE}
+# Compute Gower distance (ideal metric for purely categorical features)
+gower_dist <- cluster::daisy(
+  mushroom_clean %>% dplyr::select(-class),
+  metric = "gower")
+
+set.seed(42)
+
+# Cluster into a representative baseline structure (e.g., k = 4)
+pam_fit <- cluster::pam(gower_dist, diss = TRUE, k = 4)
+mushroom_clean$cluster_id <- as.factor(pam_fit$clustering)
+
+# Calculate Chi-Square for every feature against the cluster labels
+
+feature_importance <- purrr::map_dfr(
+  mushroom_clean %>% 
+    dplyr::select(-c(class,cluster_id)) %>% 
+    colnames(),
+  function(col) {
+  test <- chisq.test(table(mushroom_clean[[col]], mushroom_clean$cluster_id))
+  dplyr::tibble(
+    feature = col,
+    ChiSq_Score = test$statistic
+  )
+}) %>% dplyr::arrange(dplyr::desc(ChiSq_Score))
+
+max_corr <- purrr::map_dfr(
+  mushroom_clean %>% 
+    dplyr::select(-c(class,cluster_id)) %>%
+    colnames() %>% 
+    sort(), 
+  function(col) {
+    tmp_cv_matrix <- cv_matrix[,colnames(cv_matrix) != col]
+    max_val <- max(tmp_cv_matrix[col,])
+    argmax <- which(tmp_cv_matrix[col,] == max_val)
+    max_corr_with <- colnames(tmp_cv_matrix)[argmax]
+    dplyr::tibble(
+      feature = col,
+      max_corr = max_val,
+      max_corr_with = max_corr_with
+    ) 
+})
+
+feature_importance <- feature_importance %>% 
+  dplyr::left_join(
+    .,
+    max_corr) 
+
+feature_importance %>% 
+  dplyr::mutate(dplyr::across(where(is.numeric),~round(.,digits=2))) %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom feature importance"
+  )
+
+```
+
+The feature importance and Cramer V correlations confirms our initial suspicions based on the percentages of the variable values. We drop **`gill_attachment`**, **`veil_color`**, **`ring_number`**. Additionally, we remove **`gill_size`**, **`bruises`**. 
+
+```{r mushroom_features, include=FALSE}
+mushroom_clean <- mushroom_clean %>% 
+  dplyr::select(-dplyr::any_of(c(
+    "gill_attachment","veil_color","ring_number","gill_size","bruises")))
+
+mushroom_features <- mushroom_clean %>% dplyr::select(-c(class,cluster_id))
+colnames_mushroom_features <- colnames(mushroom_features)
+true_labels_mushrooms <- mushroom_clean$class
+```
+
+```{r shroom_feature_importance_2, echo=FALSE, message=FALSE, warning=FALSE}
+cv_matrix <- calc_cramers_matrix(mushroom_features)
+gower_dist <- cluster::daisy(mushroom_clean, metric = "gower")
+set.seed(42)
+pam_fit <- cluster::pam(gower_dist, diss = TRUE, k = 4)
+mushroom_features$cluster_id <- as.factor(pam_fit$clustering)
+feature_importance <- purrr::map_dfr(
+  colnames_mushroom_features,
+  function(col) {
+  test <- chisq.test(table(mushroom_features[[col]], mushroom_clean$cluster_id))
+  dplyr::tibble(
+    feature = col,
+    ChiSq_Score = test$statistic
+  )
+}) %>% dplyr::arrange(dplyr::desc(ChiSq_Score))
+
+max_corr <- purrr::map_dfr(
+  colnames_mushroom_features %>% 
+    sort(), 
+  function(col) {
+    tmp_cv_matrix <- cv_matrix[,colnames(cv_matrix) != col]
+    max_val <- max(tmp_cv_matrix[col,])
+    argmax <- which(tmp_cv_matrix[col,] == max_val)
+    max_corr_with <- colnames(tmp_cv_matrix)[argmax]
+    dplyr::tibble(
+      feature = col,
+      max_corr = max_val,
+      max_corr_with = max_corr_with
+    ) 
+})
+
+feature_importance <- feature_importance %>% 
+  dplyr::left_join(
+    .,
+    max_corr) 
+
+feature_importance %>% 
+   dplyr::mutate(dplyr::across(where(is.numeric),~round(.,digits=2))) %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom feature importance"
+  )
+```
+Let's turn to model fitting. 
+
+## Mushroom: k-modes
+The Mushroom dataset is many times larger than the recoded Iris dataset we started with, with dimension `r dim(mushroom_features)`.  Increasing large data dimensions presents challenges against using k-modes which I don't think is necessary to explore, at least not in this paper. We use Huang's fast frequency initiation.
+
+```{r echo=TRUE}
+# Isolate target keys and set search grid bounds
+possible_k <- 1:12
+mismatch_costs <- numeric(length(possible_k))
+
+# Vectorized loop running on fast configuration flags
+for (i in seq_along(possible_k)) {
+  set.seed(42)
+  fit <-  klaR::kmodes(
+    data = mushroom_features, 
+    modes = possible_k[i], 
+    fast = TRUE, # Uses Huang's fast frequency initiation
+    iter.max = 20
+  )
+  # Sum the total matching differences across all clusters
+  mismatch_costs[i] <- sum(fit$withindiff)
+}
+
+# Create the evaluation dataframe
+elbow_data <- data.frame(k = possible_k, Cost = mismatch_costs)
+
+# Instantly render the Elbow graph
+ggplot(elbow_data, aes(x = k, y = Cost)) +
+  geom_line(linewidth = 1, color = "grey") +
+  geom_point(size = 3, color = "black") +
+  theme_minimal() +
+  labs(
+    title = "K-Modes Scale Optimization Profile (Elbow Method)",
+    x = "Number of Clusters (k)",
+    y = "Total Within-Cluster Mismatch Cost"
+  )
+```
+
+The elbow plot suggests 6 clusters and so we run a bagged k-modes.
+
+```{r mushroom_kmodes_bagging, echo=FALSE, message=FALSE, warning=FALSE}
+mushrooms_bagged_kmodes_dir <- file.path(intermediates_dir,"mushrooms","bagged_k-modes")
+if (run_shroom_kmodes_bagging){
+  set.seed(42)
+  num_bootstrap <- 10
+  num_clusters  <- 6
+  
+  boot_models <- lapply(1:num_bootstrap, function(i,x = mushroom_features) {
+    # Sample row indices with replacement (Bagging)
+    boot_idx  <- sample(1:nrow(x), replace = TRUE)
+    boot_data <- x[boot_idx, ]
+    
+    # Fit k-modes on bootstrap data
+    km <- klaR::kmodes(
+      boot_data, fast = TRUE,
+      modes = num_clusters
+      )
+    
+    # Predict back on the original data layout and cast to a CLUE partition
+    # This standardizes the labels so they can be averaged
+    
+    predicted_vector <- predict_kmodes(km, x)
+    
+    partition_object <- as.cl_partition(predicted_vector)
+    
+    return(partition_object)
+    
+  })
+  dir.create(mushrooms_bagged_kmodes_dir,recursive = TRUE)
+  saveRDS(
+    boot_models,
+    file.path(mushrooms_bagged_kmodes_dir,"boot_models.rds"))
+} else {
+  
+  boot_models <- readRDS(
+    file.path(mushrooms_bagged_kmodes_dir,"boot_models.rds")
+    )
+}
+# Bind predictions into a single Cluster Ensemble object
+ensemble_bag <- clue::cl_ensemble(list = boot_models)
+# Extract Consensus via soft/hard averaging (Default: Euclidean consensus)
+ensemble_bag_consensus <- clue::cl_consensus(ensemble_bag)
+mushrooms_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
+
+table(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) %>% 
+  knitr::kable(
+    .,
+    caption = "Mushrooms data: Bagged k=modes predicted clusters"
+  )
+
+mushroom_performance <-
+dplyr::tibble(
+  method_name = "bagged k-modes",
+  variables = "nominal",
+  parameters = glue::glue("k={num_clusters},boot={num_bootstrap}"),
+  rand.seed = "42",
+  homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) %>% round(.,2)
+)
+mushroom_performance %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom: Model performance"
+  )
+
+```
+
+## Mushroom: HC
+For hierarchical clustering, we first get the most representative modes then we run Gower's distance on these modes to use in the clustering algorithm. Effectively we are doing the following:
+
+1. Get "representative" modes.
+2. Perform HC on these modes, assigning each to one of $k$ clusters.
+3. Map original data to one of the "representative" modes.
+4. Therefore, the original data rows are mapped to one of $k$ clusters.
+
+Let's start by finding the number of optimal clusters $k$ using 100 modes to keep the execution fast.
+
+```{r mushroom_hc_agg, echo=FALSE, message=FALSE, warning=FALSE}
+# 1. Compress factor rows down to 100 unique master categorical rows (modes)
+# (Using 100 instead of 500 to keep the categorical grid execution fast)
+set.seed(42)
+kmodes_compress <- klaR::kmodes(
+  data = mushroom_features, 
+  modes = 100, 
+  fast = TRUE, 
+  iter.max = 20
+)
+
+# Extract the compressed text centroids
+categorical_centroids <- kmodes_compress$modes
+
+# 2. Compute the correct categorical categorical distance profile (Gower Distance)
+# This handles the all-factor matching calculation safely without matrix explosion
+centroid_dist <- cluster::daisy(categorical_centroids, metric = "gower")
+
+grid.arrange(
+  factoextra::fviz_nbclust(as.matrix(centroid_dist), kmeans, method = "silhouette"),
+  factoextra::fviz_nbclust(as.matrix(centroid_dist), kmeans, method = "wss"),
+  ncol = 2,
+  top = "Agglomerative Hierarchical Clustering \n
+  Mushroom: Gower's Distances with weights 1"
+  )
+
+# 3. Perform Agglomerative Hierarchical Clustering on the 100 centroids
+set.seed(42)
+hc_tree <- hclust(centroid_dist, method = "ward.D2")
+
+# 4. Extract final overarching group boundaries
+centroid_clusters_k5 <- cutree(hc_tree, k = 5)
+centroid_clusters_k8 <- cutree(hc_tree, k = 8)
+
+# 5. Map the final assignments cleanly back to your original uncompressed rows
+mushrooms_hc_agg_k5_preds <- centroid_clusters_k5[kmodes_compress$cluster]
+mushrooms_hc_agg_k8_preds <- centroid_clusters_k8[kmodes_compress$cluster]
+
+table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) %>% 
+  knitr::kable(
+    .,
+    caption="HC-AGG,k=5,FAST"
+  )
+table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) %>% 
+  knitr::kable(
+    .,
+    caption="HC-AGG,k=8,FAST"
+  )
+
+mushroom_performance <- mushroom_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "HC-AGG",
+      variables = "nominal",
+      parameters = "k=5,FAST,100 Modes",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) %>% round(.,2)
+    ),
+    dplyr::tibble(
+      method_name = "HC-AGG",
+      variables = "nominal",
+      parameters = "k=8,FAST,100 Modes",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) %>% round(.,2)
+    )
+  )
+mushroom_performance %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom: Model performance"
+  )
+```
+
+
+Now, divisive hierarchical clustering.
+
+```{r mushroom_hc_div, echo=FALSE}
+# 3. Perform Divisive Hierarchical Clustering on the 100 centroids
+set.seed(42)
+hc_tree_div <- cluster::diana(centroid_dist)
+
+# 4. Extract final overarching group boundaries
+centroid_clusters_k5_div <- cutree(hc_tree_div, k = 5)
+centroid_clusters_k8_div <- cutree(hc_tree_div, k = 8)
+
+# 5. Map the final assignments cleanly back to your original uncompressed rows
+mushrooms_hc_agg_k5_preds_div <- centroid_clusters_k5_div[kmodes_compress$cluster]
+mushrooms_hc_agg_k8_preds_div <- centroid_clusters_k8_div[kmodes_compress$cluster]
+
+table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) %>% 
+  knitr::kable(
+    .,
+    caption="HC-DIV,k=5,FAST"
+  )
+table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) %>% 
+  knitr::kable(
+    .,
+    caption="HC-DIV,k=8,FAST"
+  )
+
+mushroom_performance <- mushroom_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "HC-DIV",
+      variables = "nominal",
+      parameters = "k=5,FAST,100 Modes",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) %>% round(.,2)
+    ),
+    dplyr::tibble(
+      method_name = "HC-DIV",
+      variables = "nominal",
+      parameters = "k=8,FAST,100 Modes",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) %>% round(.,2)
+    )
+  )
+mushroom_performance %>% 
+  knitr::kable(
+    .,
+    caption = "Mushroom: Model performance"
+  )
+```
+
+
+## Mushroom: LCM
+
+```{r mushroom_lcm_models, echo=TRUE}
+mushrooms_lcm_dir <- file.path(intermediates_dir,"mushrooms","lcm")
+if (run_shroom_lcm_models){
+names_possible_models <- c("Binary_p_E","Binary_p_Ej", "Binary_p_Ek",
+                           "Binary_p_Ekj","Binary_p_Ekjh","Binary_pk_E",
+                           "Binary_pk_Ej","Binary_pk_Ek","Binary_pk_Ekj",
+                           "Binary_pk_Ekjh")
+
+names(names_possible_models) <- names_possible_models
+set.seed(42)
+mushroom_lcm_models <-
+  purrr::map(names_possible_models,function(x){
+    res <- Rmixmod::mixmodCluster(
+      mushroom_features,
+      nbCluster = 1:12,
+      dataType = "qualitative",
+      model = Rmixmod::mixmodMultinomialModel(listModels = x),
+      criterion = c("ICL")
+      )
+    res
+  })
+dir.create(mushrooms_lcm_dir,recursive = TRUE)
+  saveRDS(
+    mushroom_lcm_models,
+    file.path(mushrooms_lcm_dir,"mushroom_lcm_models.rds"))
+} else {
+  
+  mushroom_lcm_models <- readRDS(
+    file.path(mushrooms_lcm_dir,"mushroom_lcm_models.rds")
+    )
+}
+
+```
+
+Now we get the ICL values by cluster then plot.
+
+```{r echo=FALSE}
+mushroom_lcm_models_lcl <-
+  purrr::map(
+    names_possible_models,function(model_name){
+      
+      this_model_results <- mushroom_lcm_models[[model_name]]
+      
+      this_model_nbcluster <- 
+        purrr::map_int(1:12,function(x = .x){
+          this_model_results@results[[x]]@nbCluster[1]  
+        })
+      
+      this_model_icl <-
+        purrr::map_dbl(1:12,function(x = .x){
+          this_model_results@results[[x]]@criterionValue[1]
+        })*-1
+      
+      dplyr::tibble(num_clusters = this_model_nbcluster,
+                    icl = this_model_icl) %>% 
+        dplyr::rename(!!model_name := icl)
+    }
+    
+    
+  )
+
+mushroom_lcm_models_lcl_df <- purrr::reduce(
+  mushroom_lcm_models_lcl,
+  dplyr::left_join,
+  by="num_clusters"
+  )
+
+model_colors <- c(
+  "Binary_p_E"="black","Binary_p_Ej"="red","Binary_p_Ek"="green",
+  "Binary_p_Ekj"="blue","Binary_p_Ekjh"="purple",
+  
+  "Binary_pk_E"="black","Binary_pk_Ej"="red","Binary_pk_Ek"="green",
+  "Binary_pk_Ekj"="blue","Binary_pk_Ekjh"="purple"
+  )
+
+model_linetypes <- c(
+  "Binary_p_E"="solid","Binary_p_Ej"="solid","Binary_p_Ek"="solid",
+  "Binary_p_Ekj"="solid","Binary_p_Ekjh"="solid",
+  
+  "Binary_pk_E"="dashed","Binary_pk_Ej"="dashed",
+  "Binary_pk_Ek"="dashed","Binary_pk_Ekj"="dashed","Binary_pk_Ekjh"="dashed")
+
+plot_base <-
+  ggplot(data=mushroom_lcm_models_lcl_df, 
+         aes(x=num_clusters))
+
+plot_all_lines <-
+  purrr::reduce(names_possible_models,function(p,model_name){
+
+  p +
+    geom_line(aes(y = rlang::eval_tidy(rlang::sym(model_name)),
+                  colour = model_name),
+              linetype = model_linetypes[model_name]) + 
+    geom_point(aes(y =  rlang::eval_tidy(rlang::sym(model_name))),
+               shape = 0)
+},
+.init = plot_base)
+
+plot_final <-
+  plot_all_lines +
+  scale_color_manual(name = "Models",
+                     values = model_colors) +
+  scale_x_continuous(breaks=seq(1,12,1)) +
+  xlab(label = "Number of clusters") +
+  ylab(label = "") +
+  labs(
+    title = "ICL of 10 Latent Class Models",
+    subtitle = "Mushroom categorical data"
+  ) +
+  theme_minimal()   
+
+plot_final
+```
+
+The best model is `Binary_pk_Ejkh` at 11 clusters. 
+
+```{r echo=TRUE}
+mushroom_lcm_models_best <- mushroom_lcm_models[["Binary_pk_Ekjh"]]@bestResult 
+```
+
+```{r echo=FALSE}
+table(true_labels_mushrooms,mushroom_lcm_models_best@partition) %>% 
+  knitr::kable(.,caption = "Mushroom: Predicted clusters LCM Binary_pk_Ekjh")
+
+mushroom_performance <- mushroom_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "LCM",
+      variables = "nominal",
+      parameters = paste0(
+        "k=",
+        mushroom_lcm_models_best@nbCluster,
+        ",",
+        mushroom_lcm_models_best@model,collapse = ""),
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(true_labels_mushrooms, mushroom_lcm_models_best@partition) %>% round(.,2)
+      )
+    ) %>% 
+  dplyr::arrange(dplyr::desc(homo_score))
+knitr::kable(
+  mushroom_performance,
+  caption="Mushroom: Methods performance")
+
+```
+
+Of these models, LCM outperformed.
+
+## Mushroom: Cluster charts
+Clusters 4,9, and 10 have 100% purity with poisonous mushrooms and characterize the overwhelming majority of them with counts of 1296, 1728, 288, respectively.  Thinking about cluster 9, the cluster with largest number of poisonous mushrooms always had  "buff" colored gills, "evanescent" ring types, with odors being "foul", "spicy", or "fishy".  In fact, these odors are only associated with poisonous mushrooms. Additionally, "large" rings are strictly associated with poisonous mushrooms, being the only ring type of cluster 4.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mushroom_features$cluster <- mushroom_lcm_models_best@partition
+mushroom_features$true_class <- true_labels_mushrooms
+mushroom_features <- mushroom_features %>% dplyr::relocate(true_class)
+mushroom_features <- mushroom_features %>% dplyr::select(-cluster_id)
+columns_for_clustering <- setdiff(
+  colnames(mushroom_features),
+  "cluster")
+my_plots <- purrr::map(
+  columns_for_clustering,
+  ~ plot_cluster_categorical_flexible(
+    data = mushroom_features,
+    cluster_col = "cluster",
+    cat_col = .x,
+    use_gradient = F,
+    title = .x
+  ))
+for( i in seq(1,length(my_plots),2) ){
+  j <- min(i+1,length(my_plots))
+  if (j == i) these_plots <- my_plots[c(i)] else these_plots <- my_plots[c(i,j)]
+  do.call(
+    "grid.arrange",
+    list(
+      grobs = these_plots,
+      nrow = 2,
+      top = "LCM k=11"))
+  
+}
+```
+
+# Zoo dataset
+The Zoo dataset is a classic benchmarking dataset containing 101 animal instances evaluated across 18 total columns [@uci_zoo_1990]. It is heavily utilized for evaluating classification and unsupervised clustering tasks because its physical traits naturally group animals into distinct biological families.
+
+```{r echo=TRUE}
+zoo_data <- get(data("Zoo", package = "mlbench"))
+zoo_features <- zoo_data %>% 
+  dplyr::select(-type) %>% 
+  dplyr::as_tibble() %>% 
+  dplyr::mutate(dplyr::across(everything(),as.factor)) %>% 
+  as.data.frame()
+true_labels_zoo <- zoo_data$type
+```
+
+## Zoo: k-modes
+
+```{r echo=FALSE}
+zoo_numeric_features <- as.data.frame(lapply(zoo_features, as.numeric))
+set.seed(42)
+zoo_k_modes_silhouette <- factoextra::fviz_nbclust(
+  zoo_numeric_features,
+  FUNcluster = klaR::kmodes,
+  method = "silhouette",
+  k.max = 12
+)
+zoo_k_modes_silhouette
+
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+set.seed(42)
+num_bootstrap <- 100
+num_clusters  <- 4
+
+boot_models <- lapply(1:num_bootstrap, function(i,x = zoo_features) {
+  # Sample row indices with replacement (Bagging)
+  boot_idx  <- sample(1:nrow(x), replace = TRUE)
+  boot_data <- x[boot_idx, ]
+  
+  # Fit k-modes on bootstrap data
+  km <- klaR::kmodes(boot_data, modes = num_clusters)
+  
+  # Predict back on the original data layout and cast to a CLUE partition
+  # This standardizes the labels so they can be averaged
+  
+  predicted_vector <- predict_kmodes(km, x)
+  
+  partition_object <- as.cl_partition(predicted_vector)
+  
+  return(partition_object)
+  
+})
+
+# Bind predictions into a single Cluster Ensemble object
+ensemble_bag <- clue::cl_ensemble(list = boot_models)
+
+# Extract Consensus via soft/hard averaging (Default: Euclidean consensus)
+ensemble_bag_consensus <- clue::cl_consensus(ensemble_bag)
+
+# Extract final hard cluster assignments
+zoo_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
+
+
+table(true_labels_zoo, zoo_kmodes_bagged_preds) %>% 
+  knitr::kable(
+    .,
+    caption="Bagged k-modes 4 clusters: truth vs predicted"
+  )
+
+zoo_performance <- dplyr::tibble(
+      method_name = "bagged k-modes",
+      variables = "nominal",
+      parameters = "k=4,iter=100",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(
+        true_labels_zoo, zoo_kmodes_bagged_preds) %>% round(.,2)
+      )
+knitr::kable(
+  zoo_performance,
+  caption="Zoo: Methods performance")
+```
+
+## Zoo: HC
+
+```{r zoo_hc_agg, secho=FALSE}
+zoo_gower <- cluster::daisy(zoo_features,metric = "gower")
+set.seed(42)
+grid.arrange(
+  factoextra::fviz_nbclust(as.matrix(zoo_gower), kmeans, method = "silhouette"),
+  factoextra::fviz_nbclust(as.matrix(zoo_gower), kmeans, method = "wss"),
+  ncol = 2,
+  top = "Agglomerative Hierarchical Clustering \n
+  Zoo: Gower's Distances with weights 1"
+  )
+set.seed(42)
+zoo_hc <- stats::hclust(zoo_gower, method = "ward.D2")
+plot(zoo_hc) 
+rect.hclust(zoo_hc, k = 3, border = "red")
+zoo_hc_classes <- stats::cutree(zoo_hc, k = 3)
+```
+This suggests 2 or 3 clusters, we go with 3.
+
+```{r}
+set.seed(42)
+zoo_hc_div <- cluster::diana(zoo_gower)
+plot(
+  zoo_hc_div, which.plots = 2, labels=FALSE, 
+  main = "Divisive Clustering on Categorical Data")
+rect.hclust(as.hclust(zoo_hc_div), k = 3, border = "red")
+zoo_hc_div_classes <- stats::cutree(as.hclust(zoo_hc_div), k = 3)
+```
+
+```{r echo=FALSE}
+table(true_labels_zoo, zoo_hc_div_classes) %>% 
+  knitr::kable(
+    .,
+    caption = "Zoo: Predicted clusters HC-DIV k=3"
+  )
+
+table(true_labels_zoo, zoo_hc_classes) %>% 
+  knitr::kable(
+    .,
+    caption = "Zoo: Predicted clusters HC-AGG k=3"
+  )
+zoo_performance <- zoo_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "HC-AGG",
+      variables = "nominal",
+      parameters = "k=3",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(
+        true_labels_zoo, zoo_hc_classes) %>% round(.,2)
+      ),
+      dplyr::tibble(
+      method_name = "HC-DIV",
+      variables = "nominal",
+      parameters = "k=3",
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(
+        true_labels_zoo, zoo_hc_div_classes) %>% round(.,2)
+      )
+    )
+knitr::kable(
+  zoo_performance,
+  caption="Zoo: Methods performance")
+```
+
+
+## Zoo: LCM
+```{r echo=FALSE}
+
+names_possible_models <- c("Binary_p_E","Binary_p_Ej", "Binary_p_Ek",
+                           "Binary_p_Ekj","Binary_p_Ekjh","Binary_pk_E",
+                           "Binary_pk_Ej","Binary_pk_Ek","Binary_pk_Ekj",
+                           "Binary_pk_Ekjh")
+
+names(names_possible_models) <- names_possible_models
+set.seed(42)
+zoo_lcm_models <-
+  purrr::map(names_possible_models,function(x){
+    res <- Rmixmod::mixmodCluster(
+      zoo_features,
+      nbCluster = 1:12,
+      dataType = "qualitative",
+      model = Rmixmod::mixmodMultinomialModel(listModels = x),
+      criterion = c("ICL")
+    )
+    res
+  })
+
+zoo_lcm_models_lcl <-
+  purrr::map(
+    names_possible_models,function(model_name){
+      
+      this_model_results <- zoo_lcm_models[[model_name]]
+      
+      this_model_nbcluster <- 
+        purrr::map_int(1:12,function(x = .x){
+          this_model_results@results[[x]]@nbCluster[1]  
+        })
+      
+      this_model_icl <-
+        purrr::map_dbl(1:12,function(x = .x){
+          this_model_results@results[[x]]@criterionValue[1]
+        })*-1
+      
+      dplyr::tibble(num_clusters = this_model_nbcluster,
+                    icl = this_model_icl) %>% 
+        dplyr::rename(!!model_name := icl)
+    }
+    
+    
+  )
+
+zoo_lcm_models_lcl_df <- purrr::reduce(
+  zoo_lcm_models_lcl,
+  dplyr::left_join,
+  by="num_clusters"
+)
+
+model_colors <- c(
+  "Binary_p_E"="black","Binary_p_Ej"="red","Binary_p_Ek"="green",
+  "Binary_p_Ekj"="blue","Binary_p_Ekjh"="purple",
+  
+  "Binary_pk_E"="black","Binary_pk_Ej"="red","Binary_pk_Ek"="green",
+  "Binary_pk_Ekj"="blue","Binary_pk_Ekjh"="purple"
+)
+
+model_linetypes <- c(
+  "Binary_p_E"="solid","Binary_p_Ej"="solid","Binary_p_Ek"="solid",
+  "Binary_p_Ekj"="solid","Binary_p_Ekjh"="solid",
+  
+  "Binary_pk_E"="dashed","Binary_pk_Ej"="dashed",
+  "Binary_pk_Ek"="dashed","Binary_pk_Ekj"="dashed","Binary_pk_Ekjh"="dashed")
+
+plot_base <-
+  ggplot(data=zoo_lcm_models_lcl_df, 
+         aes(x=num_clusters))
+
+plot_all_lines <-
+  purrr::reduce(names_possible_models,function(p,model_name){
+    
+    p +
+      geom_line(aes(y = rlang::eval_tidy(rlang::sym(model_name)),
+                    colour = model_name),
+                linetype = model_linetypes[model_name]) + 
+      geom_point(aes(y =  rlang::eval_tidy(rlang::sym(model_name))),
+                 shape = 0)
+  },
+  .init = plot_base)
+
+plot_final <-
+  plot_all_lines +
+  scale_color_manual(name = "Models",
+                     values = model_colors) +
+  scale_x_continuous(breaks=seq(1,12,1)) +
+  xlab(label = "Number of clusters") +
+  ylab(label = "") +
+  labs(
+    title = "ICL of 10 Latent Class Models",
+    subtitle = "Zoo categorical data"
+  ) +
+  theme_minimal()   
+
+plot_final
+
+```
+
+```{r echo=FALSE}
+zoo_lcm_models_best <- zoo_lcm_models[["Binary_pk_Ej"]]@bestResult 
+
+table(
+  true_labels_zoo,
+  zoo_lcm_models_best@partition) %>% 
+  knitr::kable(.,caption = "Zoo: Predicted clusters LCM Binary_pk_Ej")
+
+zoo_performance <- zoo_performance %>% 
+  dplyr::bind_rows(
+    dplyr::tibble(
+      method_name = "LCM",
+      variables = "nominal",
+      parameters = paste0(
+        "k=",
+        zoo_lcm_models_best@nbCluster,
+        ",",
+        zoo_lcm_models_best@model,collapse = ""),
+      rand.seed = "42",
+      homo_score = clevr::homogeneity(
+        true_labels_zoo, zoo_lcm_models_best@partition) %>% round(.,2)
+      )
+    ) %>% 
+  dplyr::arrange(dplyr::desc(homo_score))
+knitr::kable(
+  mushroom_performance,
+  caption="Zoo: Methods performance")
+```
+
+The LCM outperforms.
+
+# References

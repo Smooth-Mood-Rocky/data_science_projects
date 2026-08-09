@@ -1,0 +1,17 @@
+# RStudio user-specific settings and history
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Docker files 
+# Dockerfile
+
+# renv local libraries (the lockfile stays, but the heavy packages are ignored)
+renv/library/
+renv/staging/
+renv/local/
+
+# Heavy data or output folders (uncomment and modify if needed)
+benchmark_cat_data/data-raw
+
