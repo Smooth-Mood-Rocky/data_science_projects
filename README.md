@@ -5,12 +5,12 @@
 * Keywords: R, k-modes, bagging, hierarchical clustering, latent class models (LCMs), homogeneity score
 
 # Mathematical optimization
-### Constrained synthetic data generation in self-reported consumer surveys
+### Constrained synthetic data generation for self-reported consumer surveys
 * Summary: Minimize amount of synthetic data given various metrics and KPIs that appear as constraints.
 * Conclusion:
 * Keywords: R, IPF, mixed-integer linear programming (MILP), OMPR R package
 
-### Large scale optimization with Julia
+### Experimenting with large scale optimization using Julia
 * Summary:
 * Conclusion:
 * Keywords: R, mixed-integer linear programming (MILP), OMPR R package, Julia
