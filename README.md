@@ -6,11 +6,13 @@
 
 # Mathematical optimization
 ### Constrained synthetic data generation in self-reported consumer surveys
-* Summary: 
+* Summary: Minimize amount of synthetic data given various metrics and KPIs that appear as constraints.
 * Conclusion:
 * Keywords: R, IPF, mixed-integer linear programming (MILP), OMPR R package
 
 ### Large scale optimization with Julia
 * Summary:
 * Conclusion:
-* Keywords: R, mixed-integer linear programming (MILP), OMPR R package
+* Keywords: R, mixed-integer linear programming (MILP), OMPR R package, Julia
+
+# Causal inference
