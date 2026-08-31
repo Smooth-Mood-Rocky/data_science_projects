@@ -286,7 +286,7 @@ run_shroom_lcm_models <- FALSE
 ```
 
 ```{r libraries, warning=FALSE, include=FALSE}
-library(magrittr)
+# library(magrittr)
 library(knitr)
 library(MASS)
 library(klaR)
@@ -319,9 +319,9 @@ if (!dir.exists(intermediates_dir)){
 plot_cluster_categorical_flexible <- function(
     data, cluster_col, cat_col, use_gradient = FALSE,title = NA_character_) {
   
-  plot_data <- data %>%
-    dplyr::count(.data[[cluster_col]], .data[[cat_col]]) %>%
-    dplyr::group_by(.data[[cluster_col]]) %>%
+  plot_data <- data |>
+    dplyr::count(.data[[cluster_col]], .data[[cat_col]]) |>
+    dplyr::group_by(.data[[cluster_col]]) |>
     dplyr::mutate(percentage = n / sum(n) * 100)
   
   plot_title <- if (!is.na(title)) title else paste("Distribution of", cat_col, "by Cluster")
@@ -354,16 +354,16 @@ plot_cluster_categorical_flexible <- function(
   return(p)
 }
 cluster_categorical_heatmap <- function(data,cluster_col,cat_cols,title = NA_character_){
-  long_df <- data %>%
-    dplyr::select(dplyr::all_of(c(cluster_col,cat_cols))) %>% 
+  long_df <- data |>
+    dplyr::select(dplyr::all_of(c(cluster_col,cat_cols))) |> 
     tidyr::pivot_longer(
       cols = cat_cols,
       names_to = "Variable",
       values_to = "Category_Level"
-    ) %>%
-    dplyr::count(!!rlang::sym(cluster_col), Variable, Category_Level) %>%
-    dplyr::group_by(!!rlang::sym(cluster_col), Variable) %>%
-    dplyr::mutate(Proportion = n / sum(n)) %>% 
+    ) |>
+    dplyr::count(!!rlang::sym(cluster_col), Variable, Category_Level) |>
+    dplyr::group_by(!!rlang::sym(cluster_col), Variable) |>
+    dplyr::mutate(Proportion = n / sum(n)) |> 
     # Convert Variable to a factor with levels matching cat_cols order
     dplyr::mutate(Variable = factor(Variable, levels = cat_cols))
   
@@ -434,7 +434,7 @@ names(iris_measurement_variables) <- iris_measurement_variables
 iris_quantiles <-
 purrr::map(iris_measurement_variables,
            function(x){
-             iris %>% 
+             iris |> 
                dplyr::summarise(tibble::as_tibble_row(quantile(!!rlang::sym(x),probs=c(0.05,0.25,0.50,0.75,0.95))))
            }
            )
@@ -442,15 +442,15 @@ purrr::map(iris_measurement_variables,
 iris_quantiles_df <- dplyr::bind_rows(iris_quantiles) 
 iris_quantiles_df$variable <- names(iris_quantiles)
 iris_quantiles_df <- dplyr::relocate(iris_quantiles_df,variable)
-kable(iris_quantiles_df,digits=1,col.names = c("",colnames(iris_quantiles_df)[-1]),caption="Iris percentiles")
+knitr::kable(iris_quantiles_df,digits=1,col.names = c("",colnames(iris_quantiles_df)[-1]),caption="Iris percentiles")
 ```
 
 We will create four levels for each variable based on the values of the quartiles. 
 
 ```{r echo=FALSE,warning=FALSE}
 iris_no_species <-
-  iris %>% 
-  dplyr::select(-Species) %>% 
+  iris |> 
+  dplyr::select(-Species) |> 
   dplyr::mutate(sepal_length = dplyr::case_when(Sepal.Length < 5.1 ~ "Low",
                                                 Sepal.Length >= 5.1 & Sepal.Length < 5.8 ~ "Medium",
                                                 Sepal.Length >= 5.8 & Sepal.Length < 6.4 ~ "Medium-High",
@@ -475,9 +475,10 @@ iris_no_species <-
                 )
                 
 iris_recode <-
-  iris_no_species %>% 
-  dplyr::select(sepal_length,sepal_width,petal_length,petal_width) %>% 
-  dplyr::mutate(dplyr::across(dplyr::everything(),factor,levels=c("Low","Medium","Medium-High","High")))
+  iris_no_species |> 
+  dplyr::select(sepal_length, sepal_width, petal_length, petal_width) |> 
+  dplyr::mutate(dplyr::across(dplyr::everything(), \(x) factor(x, levels = c("Low", "Medium", "Medium-High", "High"))))
+
 ```
 
 The data is recoded to "Low","Medium","Medium-High","High".
@@ -489,22 +490,24 @@ names(iris_recode_col_names) <- iris_recode_col_names
 iris_counts_of_recode <-
   purrr::map(iris_recode_col_names,
             function(x){
-              iris_recode %>% 
-                dplyr::count(!!rlang::sym(x)) %>% 
-                dplyr::arrange(!!rlang::sym(x)) %>% 
+              iris_recode |> 
+                dplyr::count(!!rlang::sym(x)) |> 
+                dplyr::arrange(!!rlang::sym(x)) |> 
                 tidyr::pivot_wider(names_from = x,
-                                   values_from = "n") %>% 
+                                   values_from = "n") |> 
                 dplyr::mutate(variable = x)
               
             })
 
 iris_counts_of_recode_df <- 
-  dplyr::bind_rows(iris_counts_of_recode) %>% 
+  dplyr::bind_rows(iris_counts_of_recode) |> 
   dplyr::relocate(variable)
 
-knitr::kable(iris_counts_of_recode_df,
-             col.names = c("Recode Variable",colnames(iris_counts_of_recode_df)[-1]),
-             caption = "Counts of four iris categorical variables")
+knitr::kable(
+  iris_counts_of_recode_df,
+  col.names = c("Recode Variable",colnames(iris_counts_of_recode_df)[-1]),
+  caption = "Counts of four iris categorical variables"
+  )
 
 ```
 
@@ -526,8 +529,8 @@ iris_k_modes_silhouette_nom <- factoextra::fviz_nbclust(
   k.max = 8
   )
 
-iris_recode_integers <- iris_recode %>% 
-    dplyr::mutate(dplyr::across(dplyr::everything(),as.integer))
+iris_recode_integers <- iris_recode |> 
+    dplyr::mutate(dplyr::across(dplyr::everything(), \(x) as.integer(x)))
 set.seed(45)
 iris_k_modes_silhouette_ord <- factoextra::fviz_nbclust(
   iris_recode_integers,
@@ -569,16 +572,16 @@ iris_performance <- dplyr::tibble(
   variables = "nominal",
   parameters = "k=7",
   rand.seed = "45",
-  homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_nom_45$cluster) %>% round(.,2)
+  homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_nom_45$cluster) |> round(2)
   )
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "k-modes",
       variables = "ordinal",
       parameters = "k=3",
       rand.seed = "45",
-      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_ord_45$cluster) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_ord_45$cluster) |> round(2)
     )
   )
 knitr::kable(
@@ -597,14 +600,14 @@ iris_pred_table <- table(iris$Species,iriscat_kmodes_323$cluster)
 knitr::kable(
   iris_pred_table,
   caption="Iris recode: 3-cluster k-modes starting at `set.seed(323)`.")
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "k-modes",
       variables = "ordinal",
       parameters = "k=3",
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) |> round(2)
       )
     )
 set.seed(323)
@@ -614,14 +617,14 @@ iris_pred_table <- table(iris$Species,iriscat_kmodes_323$cluster)
 knitr::kable(
   iris_pred_table,
   caption="Iris recode: 7-cluster k-modes starting at `set.seed(323)`.")
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "k-modes",
       variables = "nominal",
       parameters = "k=7",
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iriscat_kmodes_323$cluster) |> round(2)
       )
     )
 
@@ -670,20 +673,19 @@ iris_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
 ```
 
 ```{r echo=FALSE}
-table(iris$Species, iris_kmodes_bagged_preds) %>% 
+table(iris$Species, iris_kmodes_bagged_preds) |> 
   knitr::kable(
-    .,
     caption="Bagged 7 cluster 7 modes: truth vs predicted"
   )
 
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "bagged k-modes",
       variables = "nominal",
       parameters = "k=7,iter=100",
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iris_kmodes_bagged_preds) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iris_kmodes_bagged_preds) |> round(2)
       )
     )
 knitr::kable(
@@ -713,14 +715,14 @@ iris_hc_classes <- stats::cutree(iris_hc, k = 5)
 ```
 
 ```{r echo=FALSE}
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "HC-AGG",
       variables = "nominal",
       parameters = "k=5,ward.D2",
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iris_hc_classes) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iris_hc_classes) |> round(2)
       )
     )
 knitr::kable(
@@ -741,14 +743,14 @@ iris_hc_div_classes <- stats::cutree(as.hclust(iris_hc_div), k = 5)
 ```
 
 ```{r echo=FALSE}
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "HC-DIV",
       variables = "nominal",
       parameters = "k=5",
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iris_hc_div_classes) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iris_hc_div_classes) |> round(2)
       )
     )
 knitr::kable(
@@ -804,7 +806,7 @@ iris_lcm_models_lcl <-
         })*-1
       
       dplyr::tibble(num_clusters = this_model_nbcluster,
-                    icl = this_model_icl) %>% 
+                    icl = this_model_icl) |> 
         dplyr::rename(!!model_name := icl)
     }
     
@@ -879,10 +881,10 @@ iris_lcm_models_best <- iris_lcm_models[["Binary_p_Ekjh"]]@bestResult
 ```
 
 ```{r echo=FALSE}
-table(iris$Species,iris_lcm_models_best@partition) %>% 
-  knitr::kable(.,caption = "Iris species vs. cluster estimated from  Binary_p_Ekjh LCM")
+table(iris$Species,iris_lcm_models_best@partition) |> 
+  knitr::kable(caption = "Iris species vs. cluster estimated from  Binary_p_Ekjh LCM")
 
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "LCM",
@@ -893,9 +895,9 @@ iris_performance <- iris_performance %>%
         ",",
         iris_lcm_models_best@model,collapse = ""),
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iris_lcm_models_best@partition) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iris_lcm_models_best@partition) |> round(2)
       )
-    ) %>% 
+    ) |> 
   dplyr::arrange(dplyr::desc(homo_score))
 knitr::kable(
   iris_performance,
@@ -944,12 +946,12 @@ fit_stable_clustMD <- function(X, G, model_type, n_starts = 10) {
 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-iris_md_matrix <- iris_recode %>%
-  dplyr::mutate(across(everything(), ~ as.numeric(
-    factor(., 
+iris_md_matrix <- iris_recode |>
+  dplyr::mutate(across(everything(), \(x) as.numeric(
+    factor(x, 
            levels = c("Low", "Medium", "Medium-High", "High"), 
            ordered = TRUE
-           )))) %>%
+           )))) |>
   as.matrix()
 # Takes 10 minutes or so to complete
 # Can skip if results are already available/saved
@@ -988,19 +990,19 @@ if (run_iris_fmm_modelselect){
       data.frame(Model = current_model, Clusters = current_g, ICL = NA)
     }
   })
-best_icl <- model_selection_results %>% dplyr::arrange(desc(ICL))  
+best_icl <- model_selection_results |> dplyr::arrange(desc(ICL))  
 dir.create(file.path(intermediates_dir,"iris","fmm"),recursive = TRUE)
 saveRDS(best_icl,file.path(intermediates_dir,"iris","fmm","best_icl.rds"))
 } else {
   best_icl <- readRDS(file.path(intermediates_dir,"iris","fmm","best_icl.rds"))
 }
-best_icl <- best_icl %>%
-  dplyr::filter(!is.na(ICL)) %>% 
+best_icl <- best_icl |>
+  dplyr::filter(!is.na(ICL)) |> 
   dplyr::arrange(desc(ICL)) 
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-best_icl_point <- best_icl %>% dplyr::slice(1)
+best_icl_point <- best_icl |> dplyr::slice(1)
 
 # Construct the optimization profile plot
 icl_grid_plot <- ggplot(best_icl, aes(x = Clusters, y = ICL, color = Model, group = Model)) +
@@ -1049,21 +1051,22 @@ iris_fmm_best_fit <- fit_stable_clustMD(
   
 }
 
-iris_performance <- iris_performance %>% 
+iris_performance <- iris_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "FMM",
       variables = "ordinal",
       parameters = paste0(c("k=",best_icl_point$Clusters,",",best_icl_point$Model),collapse = ""),
       rand.seed = "323",
-      homo_score = clevr::homogeneity(iris$Species, iris_fmm_best_fit$cl) %>% round(.,2)
+      homo_score = clevr::homogeneity(iris$Species, iris_fmm_best_fit$cl) |> round(2)
     )
-  ) %>% 
+  ) |> 
   dplyr::arrange(dplyr::desc(homo_score))
 
-iris_performance %>% 
+iris_performance |> 
   knitr::kable(
-    .,caption = "Iris: Model Performance")
+    caption = "Iris: Model Performance"
+    )
 
 ```
 
@@ -1072,7 +1075,7 @@ Although LCM chooses the correct number of clusters, the HC-DIV model results in
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 iris_recode$cluster <- iris_hc_div_classes
 iris_recode$true_class <- iris$Species
-iris_recode <- iris_recode %>% dplyr::relocate(true_class)
+iris_recode <- iris_recode |> dplyr::relocate(true_class)
 columns_for_clustering <- setdiff(
   colnames(iris_recode),
   "cluster")
@@ -1103,7 +1106,7 @@ for( i in seq(1,length(my_plots),2) ){
 ```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='80%', fig.align='center', fig.show='hold'}
 iris_recode$cluster <- iris_hc_div_classes
 iris_recode$true_class <- iris$Species
-iris_recode <- iris_recode %>% dplyr::relocate(true_class)
+iris_recode <- iris_recode |> dplyr::relocate(true_class)
 cluster_categorical_heatmap(
   data = iris_recode,
   cluster_col = "cluster",
@@ -1193,14 +1196,14 @@ mushroom_dict <- c(
 )
 
 # 2. Reshape and safely map descriptions via custom namespace prefixes
-all_factor_summary <- mushroom %>%
-  dplyr::select(-class) %>% 
-  tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Level") %>%
-  dplyr::group_by(Variable, Level) %>%
-  dplyr::summarise(Count = dplyr::n(), .groups = "drop_last") %>%
-  dplyr::mutate(Percentage = (Count / sum(Count)) * 100) %>%
-  dplyr::arrange(Variable, dplyr::desc(Count)) %>%
-  dplyr::ungroup() %>%
+all_factor_summary <- mushroom |>
+  dplyr::select(-class) |> 
+  tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Level") |>
+  dplyr::group_by(Variable, Level) |>
+  dplyr::summarise(Count = dplyr::n(), .groups = "drop_last") |>
+  dplyr::mutate(Percentage = (Count / sum(Count)) * 100) |>
+  dplyr::arrange(Variable, dplyr::desc(Count)) |>
+  dplyr::ungroup() |>
   # Construct variable-specific lookup targets to drop collisions completely
   dplyr::mutate(
     Level = as.character(Level),
@@ -1208,11 +1211,11 @@ all_factor_summary <- mushroom %>%
     Description = mushroom_dict[Lookup_Key],
     Level_Expanded = dplyr::if_else(!is.na(Description), paste0(Level, " (", Description, ")"), Level),
     Percentage = sprintf("%.1f%%", Percentage)
-  ) %>%
+  ) |>
   dplyr::select(Variable, Level_Expanded, Count, Percentage)
 
 # 3. Build a beautiful, nested table using kableExtra layout engines
-all_factor_summary %>%
+all_factor_summary |>
   knitr::kable(
     format = "latex",
     longtable = TRUE, 
@@ -1220,12 +1223,12 @@ all_factor_summary %>%
     col.names = c("Mushroom Feature", "Factor Level Value", "Count (N)", "Distribution (%)"),
     caption = "Exhaustive Summary Profile of All Categorical Features",
     align = "llrr"
-  ) %>%
+  ) |>
   kableExtra::kable_styling(
     bootstrap_options = c("striped", "hover", "condensed", "responsive"),
     full_width = FALSE,
     position = "left"
-  ) #%>%
+  ) #|>
   # kableExtra::collapse_rows(columns = 1, valign = "top")
 
 ```
@@ -1234,15 +1237,13 @@ all_factor_summary %>%
 Unlike the Iris data, Mushrooms data is relatively more messy. This can adversely affect our clustering results by adding noise. We must clean the data before clustering.
 
 ```{r echo=FALSE}
-mushroom %>% dplyr::select(-class) %>% 
-  dplyr::summarise(dplyr::across(dplyr::everything(),~ sum(is.na(.x)))) %>% 
-  tidyr::pivot_longer(.,
-                      dplyr::everything(),
+mushroom |> dplyr::select(-class) |> 
+  dplyr::summarise(dplyr::across(dplyr::everything(),\(x) sum(is.na(x)))) |> 
+  tidyr::pivot_longer(dplyr::everything(),
                       names_to = "variable_name",
-                      values_to = "num_missing") %>% 
-  dplyr::arrange(dplyr::desc(num_missing)) %>% 
+                      values_to = "num_missing") |> 
+  dplyr::arrange(dplyr::desc(num_missing)) |> 
   knitr::kable(
-    .,
     caption="Mushroom data"
   )
 ```
@@ -1253,35 +1254,28 @@ We may consider removing or regrouping variables with "low" or "high" cell count
 
 ```{r echo=FALSE}
 all_factor_summary$percentage <- as.numeric(gsub("%", "", all_factor_summary$Percentage)) / 100
-all_factor_summary %>% 
-  dplyr::filter(percentage > 0.90) %>% 
+all_factor_summary |> 
+  dplyr::filter(percentage > 0.90) |> 
   knitr::kable(
-    .,
     caption = "Mushroom data, more than 90% in a cell"
   )
-mushroom_clean <- mushroom %>% dplyr::select(-veil_type)
+mushroom_clean <- mushroom |> dplyr::select(-veil_type)
 ```
 
 Remove **`veil_type`** since it doesn't have any variation and, therefore, doesn't add any useful information for determining clusters. Let's investigate the other variables that were flagged.
 
 ```{r echo=FALSE}
-all_factor_summary %>% 
-  dplyr::filter(Variable == "gill_attachment") %>% dplyr::select(-percentage) %>% 
-  knitr::kable(
-    .
-  )
-all_factor_summary %>% 
-  dplyr::filter(Variable == "veil_color") %>% dplyr::select(-percentage) %>% 
-    knitr::kable(
-    .
-  )
-all_factor_summary %>% 
-  dplyr::filter(Variable == "ring_number") %>% dplyr::select(-percentage) %>%  
-    knitr::kable(
-    .
-  )
+all_factor_summary |> 
+  dplyr::filter(Variable == "gill_attachment") |> dplyr::select(-percentage) |> 
+  knitr::kable()
+all_factor_summary |> 
+  dplyr::filter(Variable == "veil_color") |> dplyr::select(-percentage) |> 
+    knitr::kable()
+all_factor_summary |> 
+  dplyr::filter(Variable == "ring_number") |> dplyr::select(-percentage) |>  
+    knitr::kable()
 
-cv_matrix <- calc_cramers_matrix(mushroom_clean %>% dplyr::select(-class))
+cv_matrix <- calc_cramers_matrix(mushroom_clean |> dplyr::select(-class))
   
 ```
 
@@ -1321,7 +1315,7 @@ Therefore, initializing an unsupervised algorithm (such as K-Modes) with `modes 
 ```{r shroom_feature_importance, echo=FALSE, message=FALSE, warning=FALSE}
 # Compute Gower distance (ideal metric for purely categorical features)
 gower_dist <- cluster::daisy(
-  mushroom_clean %>% dplyr::select(-class),
+  mushroom_clean |> dplyr::select(-class),
   metric = "gower")
 
 set.seed(42)
@@ -1333,8 +1327,8 @@ mushroom_clean$cluster_id <- as.factor(pam_fit$clustering)
 # Calculate Chi-Square for every feature against the cluster labels
 
 feature_importance <- purrr::map_dfr(
-  mushroom_clean %>% 
-    dplyr::select(-c(class,cluster_id)) %>% 
+  mushroom_clean |> 
+    dplyr::select(-c(class,cluster_id)) |> 
     colnames(),
   function(col) {
   test <- chisq.test(table(mushroom_clean[[col]], mushroom_clean$cluster_id))
@@ -1342,12 +1336,12 @@ feature_importance <- purrr::map_dfr(
     feature = col,
     ChiSq_Score = test$statistic
   )
-}) %>% dplyr::arrange(dplyr::desc(ChiSq_Score))
+}) |> dplyr::arrange(dplyr::desc(ChiSq_Score))
 
 max_corr <- purrr::map_dfr(
-  mushroom_clean %>% 
-    dplyr::select(-c(class,cluster_id)) %>%
-    colnames() %>% 
+  mushroom_clean |> 
+    dplyr::select(-c(class,cluster_id)) |>
+    colnames() |> 
     sort(), 
   function(col) {
     tmp_cv_matrix <- cv_matrix[,colnames(cv_matrix) != col]
@@ -1361,15 +1355,12 @@ max_corr <- purrr::map_dfr(
     ) 
 })
 
-feature_importance <- feature_importance %>% 
-  dplyr::left_join(
-    .,
-    max_corr) 
+feature_importance <- feature_importance |> 
+  dplyr::left_join(max_corr) 
 
-feature_importance %>% 
-  dplyr::mutate(dplyr::across(where(is.numeric),~round(.,digits=2))) %>% 
+feature_importance |> 
+  dplyr::mutate(dplyr::across(where(is.numeric),\(x) round(x,digits=2))) |> 
   knitr::kable(
-    .,
     caption = "Mushroom feature importance"
   )
 
@@ -1378,11 +1369,11 @@ feature_importance %>%
 The feature importance and Cramer V correlations confirms our initial suspicions based on the percentages of the variable values. We drop **`gill_attachment`**, **`veil_color`**, **`ring_number`**. Additionally, we remove **`gill_size`**, **`bruises`**. 
 
 ```{r mushroom_features, include=FALSE}
-mushroom_clean <- mushroom_clean %>% 
+mushroom_clean <- mushroom_clean |> 
   dplyr::select(-dplyr::any_of(c(
     "gill_attachment","veil_color","ring_number","gill_size","bruises")))
 
-mushroom_features <- mushroom_clean %>% dplyr::select(-c(class,cluster_id))
+mushroom_features <- mushroom_clean |> dplyr::select(-c(class,cluster_id))
 colnames_mushroom_features <- colnames(mushroom_features)
 true_labels_mushrooms <- mushroom_clean$class
 ```
@@ -1401,10 +1392,10 @@ feature_importance <- purrr::map_dfr(
     feature = col,
     ChiSq_Score = test$statistic
   )
-}) %>% dplyr::arrange(dplyr::desc(ChiSq_Score))
+}) |> dplyr::arrange(dplyr::desc(ChiSq_Score))
 
 max_corr <- purrr::map_dfr(
-  colnames_mushroom_features %>% 
+  colnames_mushroom_features |> 
     sort(), 
   function(col) {
     tmp_cv_matrix <- cv_matrix[,colnames(cv_matrix) != col]
@@ -1418,15 +1409,12 @@ max_corr <- purrr::map_dfr(
     ) 
 })
 
-feature_importance <- feature_importance %>% 
-  dplyr::left_join(
-    .,
-    max_corr) 
+feature_importance <- feature_importance |> 
+  dplyr::left_join(max_corr) 
 
-feature_importance %>% 
-   dplyr::mutate(dplyr::across(where(is.numeric),~round(.,digits=2))) %>% 
+feature_importance |> 
+   dplyr::mutate(dplyr::across(where(is.numeric),\(x) round(x,digits=2))) |> 
   knitr::kable(
-    .,
     caption = "Mushroom feature importance"
   )
 ```
@@ -1514,9 +1502,8 @@ ensemble_bag <- clue::cl_ensemble(list = boot_models)
 ensemble_bag_consensus <- clue::cl_consensus(ensemble_bag)
 mushrooms_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
 
-table(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) %>% 
+table(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) |> 
   knitr::kable(
-    .,
     caption = "Mushrooms data: Bagged k=modes predicted clusters"
   )
 
@@ -1526,11 +1513,10 @@ dplyr::tibble(
   variables = "nominal",
   parameters = glue::glue("k={num_clusters},boot={num_bootstrap}"),
   rand.seed = "42",
-  homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) %>% round(.,2)
+  homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_kmodes_bagged_preds) |> round(2)
 )
-mushroom_performance %>% 
+mushroom_performance |> 
   knitr::kable(
-    .,
     caption = "Mushroom: Model performance"
   )
 
@@ -1584,37 +1570,34 @@ centroid_clusters_k8 <- cutree(hc_tree, k = 8)
 mushrooms_hc_agg_k5_preds <- centroid_clusters_k5[kmodes_compress$cluster]
 mushrooms_hc_agg_k8_preds <- centroid_clusters_k8[kmodes_compress$cluster]
 
-table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) %>% 
+table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) |> 
   knitr::kable(
-    .,
     caption="HC-AGG,k=5,FAST"
   )
-table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) %>% 
+table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) |> 
   knitr::kable(
-    .,
     caption="HC-AGG,k=8,FAST"
   )
 
-mushroom_performance <- mushroom_performance %>% 
+mushroom_performance <- mushroom_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "HC-AGG",
       variables = "nominal",
       parameters = "k=5,FAST,100 Modes",
       rand.seed = "42",
-      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) %>% round(.,2)
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds) |> round(2)
     ),
     dplyr::tibble(
       method_name = "HC-AGG",
       variables = "nominal",
       parameters = "k=8,FAST,100 Modes",
       rand.seed = "42",
-      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) %>% round(.,2)
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds) |> round(2)
     )
   )
-mushroom_performance %>% 
+mushroom_performance |> 
   knitr::kable(
-    .,
     caption = "Mushroom: Model performance"
   )
 ```
@@ -1635,37 +1618,34 @@ centroid_clusters_k8_div <- cutree(hc_tree_div, k = 8)
 mushrooms_hc_agg_k5_preds_div <- centroid_clusters_k5_div[kmodes_compress$cluster]
 mushrooms_hc_agg_k8_preds_div <- centroid_clusters_k8_div[kmodes_compress$cluster]
 
-table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) %>% 
+table(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) |> 
   knitr::kable(
-    .,
     caption="HC-DIV,k=5,FAST"
   )
-table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) %>% 
+table(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) |> 
   knitr::kable(
-    .,
     caption="HC-DIV,k=8,FAST"
   )
 
-mushroom_performance <- mushroom_performance %>% 
+mushroom_performance <- mushroom_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "HC-DIV",
       variables = "nominal",
       parameters = "k=5,FAST,100 Modes",
       rand.seed = "42",
-      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) %>% round(.,2)
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k5_preds_div) |> round(2)
     ),
     dplyr::tibble(
       method_name = "HC-DIV",
       variables = "nominal",
       parameters = "k=8,FAST,100 Modes",
       rand.seed = "42",
-      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) %>% round(.,2)
+      homo_score = clevr::homogeneity(true_labels_mushrooms,mushrooms_hc_agg_k8_preds_div) |> round(2)
     )
   )
-mushroom_performance %>% 
+mushroom_performance |> 
   knitr::kable(
-    .,
     caption = "Mushroom: Model performance"
   )
 ```
@@ -1727,7 +1707,7 @@ mushroom_lcm_models_lcl <-
         })*-1
       
       dplyr::tibble(num_clusters = this_model_nbcluster,
-                    icl = this_model_icl) %>% 
+                    icl = this_model_icl) |> 
         dplyr::rename(!!model_name := icl)
     }
     
@@ -1794,10 +1774,10 @@ mushroom_lcm_models_best <- mushroom_lcm_models[["Binary_pk_Ekjh"]]@bestResult
 ```
 
 ```{r echo=FALSE}
-table(true_labels_mushrooms,mushroom_lcm_models_best@partition) %>% 
-  knitr::kable(.,caption = "Mushroom: Predicted clusters LCM Binary_pk_Ekjh")
+table(true_labels_mushrooms,mushroom_lcm_models_best@partition) |> 
+  knitr::kable(caption = "Mushroom: Predicted clusters LCM Binary_pk_Ekjh")
 
-mushroom_performance <- mushroom_performance %>% 
+mushroom_performance <- mushroom_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "LCM",
@@ -1808,9 +1788,9 @@ mushroom_performance <- mushroom_performance %>%
         ",",
         mushroom_lcm_models_best@model,collapse = ""),
       rand.seed = "42",
-      homo_score = clevr::homogeneity(true_labels_mushrooms, mushroom_lcm_models_best@partition) %>% round(.,2)
+      homo_score = clevr::homogeneity(true_labels_mushrooms, mushroom_lcm_models_best@partition) |> round(2)
       )
-    ) %>% 
+    ) |> 
   dplyr::arrange(dplyr::desc(homo_score))
 knitr::kable(
   mushroom_performance,
@@ -1826,8 +1806,8 @@ Clusters 4,9, and 10 have 100% purity with poisonous mushrooms and characterize 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 mushroom_features$cluster <- mushroom_lcm_models_best@partition
 mushroom_features$true_class <- true_labels_mushrooms
-mushroom_features <- mushroom_features %>% dplyr::relocate(true_class)
-mushroom_features <- mushroom_features %>% dplyr::select(-cluster_id)
+mushroom_features <- mushroom_features |> dplyr::relocate(true_class)
+mushroom_features <- mushroom_features |> dplyr::select(-cluster_id)
 columns_for_clustering <- setdiff(
   colnames(mushroom_features),
   "cluster")
@@ -1858,10 +1838,10 @@ The Zoo dataset is a classic benchmarking dataset containing 101 animal instance
 
 ```{r echo=TRUE}
 zoo_data <- get(data("Zoo", package = "mlbench"))
-zoo_features <- zoo_data %>% 
-  dplyr::select(-type) %>% 
-  dplyr::as_tibble() %>% 
-  dplyr::mutate(dplyr::across(everything(),as.factor)) %>% 
+zoo_features <- zoo_data |> 
+  dplyr::select(-type) |> 
+  dplyr::as_tibble() |> 
+  dplyr::mutate(dplyr::across(everything(),\(x) as.factor(x))) |> 
   as.data.frame()
 true_labels_zoo <- zoo_data$type
 ```
@@ -1914,9 +1894,8 @@ ensemble_bag_consensus <- clue::cl_consensus(ensemble_bag)
 zoo_kmodes_bagged_preds <- clue::cl_class_ids(ensemble_bag_consensus)
 
 
-table(true_labels_zoo, zoo_kmodes_bagged_preds) %>% 
+table(true_labels_zoo, zoo_kmodes_bagged_preds) |> 
   knitr::kable(
-    .,
     caption="Bagged k-modes 4 clusters: truth vs predicted"
   )
 
@@ -1926,7 +1905,7 @@ zoo_performance <- dplyr::tibble(
       parameters = "k=4,iter=100",
       rand.seed = "42",
       homo_score = clevr::homogeneity(
-        true_labels_zoo, zoo_kmodes_bagged_preds) %>% round(.,2)
+        true_labels_zoo, zoo_kmodes_bagged_preds) |> round(2)
       )
 knitr::kable(
   zoo_performance,
@@ -1964,18 +1943,16 @@ zoo_hc_div_classes <- stats::cutree(as.hclust(zoo_hc_div), k = 3)
 ```
 
 ```{r echo=FALSE}
-table(true_labels_zoo, zoo_hc_div_classes) %>% 
+table(true_labels_zoo, zoo_hc_div_classes) |> 
   knitr::kable(
-    .,
     caption = "Zoo: Predicted clusters HC-DIV k=3"
   )
 
-table(true_labels_zoo, zoo_hc_classes) %>% 
+table(true_labels_zoo, zoo_hc_classes) |> 
   knitr::kable(
-    .,
     caption = "Zoo: Predicted clusters HC-AGG k=3"
   )
-zoo_performance <- zoo_performance %>% 
+zoo_performance <- zoo_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "HC-AGG",
@@ -1983,7 +1960,7 @@ zoo_performance <- zoo_performance %>%
       parameters = "k=3",
       rand.seed = "42",
       homo_score = clevr::homogeneity(
-        true_labels_zoo, zoo_hc_classes) %>% round(.,2)
+        true_labels_zoo, zoo_hc_classes) |> round(2)
       ),
       dplyr::tibble(
       method_name = "HC-DIV",
@@ -1991,7 +1968,7 @@ zoo_performance <- zoo_performance %>%
       parameters = "k=3",
       rand.seed = "42",
       homo_score = clevr::homogeneity(
-        true_labels_zoo, zoo_hc_div_classes) %>% round(.,2)
+        true_labels_zoo, zoo_hc_div_classes) |> round(2)
       )
     )
 knitr::kable(
@@ -2039,7 +2016,7 @@ zoo_lcm_models_lcl <-
         })*-1
       
       dplyr::tibble(num_clusters = this_model_nbcluster,
-                    icl = this_model_icl) %>% 
+                    icl = this_model_icl) |> 
         dplyr::rename(!!model_name := icl)
     }
     
@@ -2105,10 +2082,10 @@ zoo_lcm_models_best <- zoo_lcm_models[["Binary_pk_Ej"]]@bestResult
 
 table(
   true_labels_zoo,
-  zoo_lcm_models_best@partition) %>% 
-  knitr::kable(.,caption = "Zoo: Predicted clusters LCM Binary_pk_Ej")
+  zoo_lcm_models_best@partition) |> 
+  knitr::kable(caption = "Zoo: Predicted clusters LCM Binary_pk_Ej")
 
-zoo_performance <- zoo_performance %>% 
+zoo_performance <- zoo_performance |> 
   dplyr::bind_rows(
     dplyr::tibble(
       method_name = "LCM",
@@ -2120,9 +2097,9 @@ zoo_performance <- zoo_performance %>%
         zoo_lcm_models_best@model,collapse = ""),
       rand.seed = "42",
       homo_score = clevr::homogeneity(
-        true_labels_zoo, zoo_lcm_models_best@partition) %>% round(.,2)
+        true_labels_zoo, zoo_lcm_models_best@partition) |> round(2)
       )
-    ) %>% 
+    ) |> 
   dplyr::arrange(dplyr::desc(homo_score))
 knitr::kable(
   mushroom_performance,
